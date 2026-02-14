@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件转换服务测试页面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 800px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .form-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-left: 5px solid #667eea;
+        }
+
+        .legacy-fields {
+            border-top: 2px dashed #e1e5e9;
+            margin-top: 20px;
+            padding-top: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .form-section h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-section h3::before {
+            content: "🔧";
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            margin-left: 10px;
+            width: auto;
+            min-width: 120px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .result-section {
+            background: #fff;
+            border-radius: 15px;
+            padding: 30px;
+            border-left: 5px solid #28a745;
+            margin-top: 30px;
+            display: none;
+        }
+
+        .result-section h3 {
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .result-section h3::before {
+            content: "📊";
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+
+        .result-content {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.5;
+            border: 1px solid #e1e5e9;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-loading {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .service-status {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2196f3;
+        }
+
+        .service-status h3 {
+            color: #1976d2;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .service-status h3::before {
+            content: "⚡";
+            margin-right: 10px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 20px;
+                padding: 20px;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+            }
+            
+            .btn-secondary {
+                margin-left: 0;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 文件转换服务测试平台</h1>
+            <p>测试文件转换微服务的功能接口，支持OFD、图片、文档、表格等多种格式</p>
+        </div>
+
+        <div class="service-status">
+            <h3>服务状态检查</h3>
+            <div>
+                <span>文件转换服务:</span>
+                <span id="serviceStatus" class="status-indicator status-loading">检查中...</span>
+                <button class="btn-secondary" onclick="checkServiceHealth()">重新检查</button>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>统一文件转换接口测试</h3>
+            <form id="convertForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fileId">文件ID:</label>
+                        <input type="text" id="fileId" name="fileId" value="FILE_001" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="targetFileName">目标文件名称:</label>
+                        <input type="text" id="targetFileName" name="targetFileName" value="测试图片" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fileType">文件类型:</label>
+                        <select id="fileType" name="fileType" required>
+                            <option value="image">图片文件</option>
+                            <option value="TDF">文档文件</option>
+                            <option value="SPREADSHEET">表格文件</option>
+                            <option value="ofd">OFD文件</option>
+                            <option value="video">视频文件</option>
+                            <option value="audio">音频文件</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="conversionMode">转换模式:</label>
+                        <select id="conversionMode" name="conversionMode" onchange="toggleConversionMode()" required>
+                            <option value="unified-params">统一接口 (参数)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">              
+                    <div class="form-group">
+                        <label for="targetFormat">目标格式:</label>
+                        <select id="targetFormat" name="targetFormat" required>
+                            <optgroup label="图片格式">
+                                <option value="png">PNG</option>
+                                <option value="jpeg">JPEG</option>
+                                <option value="jpg">JPG</option>
+                                <option value="bmp">BMP</option>
+                                <option value="gif">GIF</option>
+                                <option value="tiff">TIFF</option>
+                            </optgroup>
+                            <optgroup label="文档格式">
+                                <option value="pdf">PDF</option>
+                                <option value="docx">DOCX</option>
+                                <option value="txt">TXT</option>
+                            </optgroup>
+                            <optgroup label="OFD格式">
+                                <option value="png">PNG图片</option>
+                                <option value="jpeg">JPEG图片</option>
+                                <option value="jpg">JPG图片</option>
+                                <option value="pdf">PDF文档</option>
+                            </optgroup>
+                            <optgroup label="表格格式">
+                                <option value="xlsx">XLSX</option>
+                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="filePath">源文件路径:</label>
+                    <input type="text" id="filePath" name="filePath" value="D:/myWorkSpace/fileview-backend/fileTemp/source/" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="targetPath">转换后文件存放目录:</label>
+                    <input type="text" id="targetPath" name="targetPath" value="D:/myWorkSpace/fileview-backend/fileTemp/target" required>
+                </div>
+
+                <div class="legacy-fields" id="legacyFields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="eventType">事件类型:</label>
+                            <select id="eventType" name="eventType">
+                                <option value="FILE_CONVERTED">文件转换</option>
+                                <option value="FILE_UPLOADED">文件上传</option>
+                                <option value="FILE_SAVED">文件保存</option>
+                                <option value="FILE_PREVIEWED">文件预览</option>                             
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="sourceService">源服务:</label>
+                            <input type="text" id="sourceService" name="sourceService" value="unified-test-service">
+                        </div>
+                    </div>
+                   
+                </div>
+
+                <div class="btn-group">
+                    <button type="submit" class="btn">
+                        <span id="submitText">发送转换事件</span>
+                        <span id="loadingIndicator" class="loading" style="display: none;"></span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="generateSampleData()">生成示例数据</button>
+                    <button type="button" class="btn btn-secondary" onclick="testAllEndpoints()">测试所有接口</button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">清空表单</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="result-section" id="resultSection">
+            <h3>响应结果</h3>
+            <div class="result-content" id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载完成后检查服务状态
+        window.addEventListener('load', function() {
+            checkServiceHealth();
+            // 初始化表单状态
+            toggleConversionMode();
+        });
+
+        // 切换转换模式
+        function toggleConversionMode() {
+            const mode = document.getElementById('conversionMode').value;
+            const legacyFields = document.getElementById('legacyFields');
+            const submitText = document.getElementById('submitText');
+            
+            if (mode === 'legacy') {
+                legacyFields.style.display = 'block';
+                submitText.textContent = '发送传统转换事件';
+            } else {
+                legacyFields.style.display = 'none';
+                submitText.textContent = '发送统一转换事件';
+            }
+        }
+
+        // 检查服务健康状态
+        async function checkServiceHealth() {
+            const statusElement = document.getElementById('serviceStatus');
+            statusElement.className = 'status-indicator status-loading';
+            statusElement.textContent = '检查中...';
+
+            try {
+                const response = await fetch('/convert/health');
+                if (response.ok) {
+                    const result = await response.text();
+                    statusElement.className = 'status-indicator status-success';
+                    statusElement.textContent = '✅ 服务正常';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                statusElement.className = 'status-indicator status-error';
+                statusElement.textContent = '❌ 服务异常';
+                console.error('服务健康检查失败:', error);
+            }
+        }
+
+        // 表单提交处理
+        document.getElementById('convertForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.querySelector('button[type="submit"]');
+            const submitText = document.getElementById('submitText');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const resultSection = document.getElementById('resultSection');
+            const resultContent = document.getElementById('resultContent');
+            const mode = document.getElementById('conversionMode').value;
+
+            // 显示加载状态
+            submitText.textContent = '发送中...';
+            loadingIndicator.style.display = 'inline-block';
+            submitBtn.disabled = true;
+
+            try {
+                let endpoint, requestData, requestOptions;
+                
+                if (mode === 'unified-json') {
+                    // 统一接口 JSON 方式
+                    endpoint = '/convert/unified-convert-json';
+                    requestData = {
+                        fileId: document.getElementById('fileId').value,
+                        fileType: document.getElementById('fileType').value,
+                        fileName: document.getElementById('fileName').value,
+                        sourceFilePath: document.getElementById('sourceFilePath').value,
+                        targetFilePath: document.getElementById('targetFilePath').value,
+                        sourceFormat: document.getElementById('sourceFormat').value,
+                        targetFormat: document.getElementById('targetFormat').value
+                    };
+                    requestOptions = {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestData)
+                    };
+                } else if (mode === 'unified-params') {
+                    // 统一接口 URL 参数方式
+                    endpoint = '/api/convert/local-convert';
+                    const params = new URLSearchParams({
+                        fileId: document.getElementById('fileId').value,
+                        fileType: document.getElementById('fileType').value,                     
+                        filePath: document.getElementById('filePath').value,
+                        targetPath: document.getElementById('targetPath').value,
+                        targetFileName: document.getElementById('targetFileName').value,
+                        targetFormat: document.getElementById('targetFormat').value
+                    });
+                    requestData = params;
+                    requestOptions = {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: params
+                    };
+                } else {
+                    // 传统接口
+                    endpoint = '/convert/event';
+                    requestData = {
+                        fileId: document.getElementById('fileId').value,
+                        fileType: document.getElementById('fileType').value,                     
+                        filePath: document.getElementById('filePath').value,
+                        targetPath: document.getElementById('targetPath').value,
+                        targetFileName: document.getElementById('targetFileName').value,
+                        targetFormat: document.getElementById('targetFormat').value,
+                        eventType: document.getElementById('eventType').value,
+                        sourceService: document.getElementById('sourceService').value
+                    };
+                    requestOptions = {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestData)
+                    };
+                }
+
+                const response = await fetch(endpoint, requestOptions);
+
+                let result;
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    result = await response.text();
+                }
+
+                // 显示结果
+                resultSection.style.display = 'block';
+                
+                if (response.ok) {
+                    resultContent.innerHTML = `
+<strong>✅ 请求成功!</strong>
+状态码: ${response.status}
+响应时间: ${new Date().toLocaleString()}
+使用接口: ${endpoint} (${mode})
+
+<strong>📤 发送的数据:</strong>
+${typeof requestData === 'object' && requestData.constructor === URLSearchParams ? 
+  Array.from(requestData.entries()).map(([k,v]) => `${k}: ${v}`).join('\n') : 
+  JSON.stringify(requestData, null, 2)}
+
+<strong>📥 服务器响应:</strong>
+${typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+
+<strong>💡 提示:</strong>
+事件已发送到RocketMQ队列，请检查服务日志确认消费者是否正常处理。
+                    `;
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${result}`);
+                }
+
+            } catch (error) {
+                resultSection.style.display = 'block';
+                resultContent.innerHTML = `
+<strong>❌ 请求失败!</strong>
+错误信息: ${error.message}
+发生时间: ${new Date().toLocaleString()}
+使用接口: ${endpoint || '未定义'} (${mode})
+
+<strong>📤 尝试发送的数据:</strong>
+${typeof requestData === 'object' && requestData ? 
+  (requestData.constructor === URLSearchParams ? 
+    Array.from(requestData.entries()).map(([k,v]) => `${k}: ${v}`).join('\n') : 
+    JSON.stringify(requestData, null, 2)) : 
+  '未定义'}
+
+<strong>🔧 故障排查建议:</strong>
+1. 检查文件转换服务是否正常运行 (端口8081)
+2. 确认RocketMQ服务是否启动
+3. 查看服务控制台日志
+4. 验证请求参数格式是否正确
+5. 检查源文件路径是否存在
+6. 确认目标文件路径目录可写
+                `;
+                console.error('请求失败:', error);
+            } finally {
+                // 恢复按钮状态
+                toggleConversionMode(); // 恢复按钮文本
+                loadingIndicator.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        });
+
+        // 生成示例数据
+        function generateSampleData() {
+            const samples = [
+                {
+                    fileId: 'IMG_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    targetFileName: '测试图片.tiff',
+                    fileType: 'image',
+                    targetFormat: 'png',
+                    filePath: 'D:/uploads/images/测试图片.tiff',
+                    targetPath: 'D:/converted/images/测试图片.png',
+                    eventType: 'FILE_UPLOADED',
+                    sourceService: 'image-upload-service'
+                },
+                {
+                    fileId: 'DOC_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    fileName: '年度报告.pdf',
+                    fileType: 'document',
+                    sourceFormat: 'pdf',
+                    targetFormat: 'docx',
+                    sourceFilePath: 'D:/uploads/documents/年度报告.pdf',
+                    targetFilePath: 'D:/converted/documents/年度报告.docx',
+                    eventType: 'FILE_UPLOADED',
+                    sourceService: 'document-service',
+                    filePath: '/uploads/reports/年度报告.pdf'
+                },
+                {
+                    fileId: 'XLS_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    fileName: '销售数据.xlsx',
+                    fileType: 'excel',
+                    sourceFormat: 'xlsx',
+                    targetFormat: 'csv',
+                    sourceFilePath: 'D:/uploads/excel/销售数据.xlsx',
+                    targetFilePath: 'D:/converted/csv/销售数据.csv',
+                    eventType: 'FILE_SAVED',
+                    sourceService: 'excel-service',
+                    filePath: '/uploads/data/销售数据.xlsx'
+                },
+                {
+                    fileId: 'WORD_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    fileName: '合同模板.docx',
+                    fileType: 'document',
+                    sourceFormat: 'docx',
+                    targetFormat: 'pdf',
+                    sourceFilePath: 'D:/uploads/templates/合同模板.docx',
+                    targetFilePath: 'D:/converted/pdf/合同模板.pdf',
+                    eventType: 'FILE_PREVIEWED',
+                    sourceService: 'contract-service',
+                    filePath: '/uploads/templates/合同模板.docx'
+                },
+                {
+                    fileId: 'JPG_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    fileName: '产品展示.jpg',
+                    fileType: 'image',
+                    sourceFormat: 'jpg',
+                    targetFormat: 'png',
+                    sourceFilePath: 'D:/uploads/products/产品展示.jpg',
+                    targetFilePath: 'D:/converted/products/产品展示.png',
+                    eventType: 'FILE_UPLOADED',
+                    sourceService: 'product-service',
+                    filePath: '/uploads/products/产品展示.jpg'
+                },
+                {
+                    fileId: 'OFD_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    targetFileName: '电子发票.ofd',
+                    fileType: 'ofd',
+                    targetFormat: 'png',
+                    filePath: 'D:/uploads/invoices/电子发票.ofd',
+                    targetPath: 'D:/converted/invoices/电子发票.png',
+                    eventType: 'FILE_CONVERTED',
+                    sourceService: 'invoice-service'
+                },
+                {
+                    fileId: 'OFD_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    targetFileName: '合同文本.ofd',
+                    fileType: 'ofd',
+                    targetFormat: 'pdf',
+                    filePath: 'D:/uploads/contracts/合同文本.ofd',
+                    targetPath: 'D:/converted/contracts/合同文本.pdf',
+                    eventType: 'FILE_UPLOADED',
+                    sourceService: 'contract-service'
+                }
+            ];
+
+            const randomSample = samples[Math.floor(Math.random() * samples.length)];
+            
+            Object.keys(randomSample).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    element.value = randomSample[key];
+                }
+            });
+
+            // 添加视觉反馈
+            const form = document.getElementById('convertForm');
+            form.style.transform = 'scale(1.02)';
+            setTimeout(() => {
+                form.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        // 清空表单
+        function clearForm() {
+            document.getElementById('convertForm').reset();
+            document.getElementById('resultSection').style.display = 'none';
+            
+            // 设置默认值
+            document.getElementById('fileId').value = 'FILE_001';
+            document.getElementById('targetFileName').value = '测试文件';
+            document.getElementById('fileType').value = 'ofd';
+            document.getElementById('targetFormat').value = 'png';
+            document.getElementById('filePath').value = 'D:/myWorkSpace/fileview-backend/fileTemp/source';
+            document.getElementById('targetPath').value = 'D:/myWorkSpace/fileview-backend/fileTemp/target';
+            document.getElementById('conversionMode').value = 'unified-json';
+            document.getElementById('sourceService').value = 'unified-test-service';
+            
+            // 重新设置表单状态
+            toggleConversionMode();
+        }
+        
+        // 测试所有接口
+        async function testAllEndpoints() {
+            const resultSection = document.getElementById('resultSection');
+            const resultContent = document.getElementById('resultContent');
+            
+            resultSection.style.display = 'block';
+            resultContent.innerHTML = '🔄 正在测试所有接口...';
+            
+            const tests = [
+                {
+                    name: '统一接口 (JSON) - 图片转换',
+                    endpoint: '/convert/unified-convert-json',
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileId: 'TEST_IMG_' + Date.now(),
+                        fileType: 'image',
+                        fileName: '测试图片.tiff',
+                        sourceFilePath: 'D:/test/测试图片.tiff',
+                        targetFilePath: 'D:/test/测试图片.png',
+                        sourceFormat: 'tiff',
+                        targetFormat: 'png'
+                    })
+                },
+                {
+                    name: '统一接口 (URL参数) - 文档转换',
+                    endpoint: '/convert/unified-convert',
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        fileId: 'TEST_DOC_' + Date.now(),
+                        fileType: 'document',
+                        fileName: '测试文档.pdf',
+                        sourceFilePath: 'D:/test/测试文档.pdf',
+                        targetFilePath: 'D:/test/测试文档.docx',
+                        sourceFormat: 'pdf',
+                        targetFormat: 'docx'
+                    })
+                },
+                {
+                    name: '传统接口 - Excel转换',
+                    endpoint: '/convert/event',
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileId: 'TEST_XLS_' + Date.now(),
+                        fileName: '测试表格.xlsx',
+                        fileType: 'xlsx',
+                        targetFormat: 'csv',
+                        filePath: '/test/测试表格.xlsx',
+                        eventType: 'FILE_UPLOADED',
+                        sourceService: 'test-service'
+                    })
+                },
+                {
+                    name: '统一接口 (JSON) - OFD转图片',
+                    endpoint: '/convert/unified-convert-json',
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileId: 'TEST_OFD_' + Date.now(),
+                        fileType: 'ofd',
+                        targetFileName: '电子发票.ofd',
+                        filePath: 'D:/test/电子发票.ofd',
+                        targetPath: 'D:/test/converted/',
+                        targetFormat: 'png'
+                    })
+                },
+                {
+                    name: '统一接口 (URL参数) - OFD转PDF',
+                    endpoint: '/convert/unified-convert',
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        fileId: 'TEST_OFD_PDF_' + Date.now(),
+                        fileType: 'ofd',
+                        targetFileName: '合同文本.ofd',
+                        filePath: 'D:/test/合同文本.ofd',
+                        targetPath: 'D:/test/converted/',
+                        targetFormat: 'pdf'
+                    })
+                },
+                {
+                    name: '统一转换测试接口',
+                    endpoint: '/convert/test-unified-convert',
+                    method: 'POST',
+                    headers: {},
+                    body: null
+                }
+            ];
+            
+            let results = [];
+            
+            for (let test of tests) {
+                try {
+                    const response = await fetch(test.endpoint, {
+                        method: test.method,
+                        headers: test.headers,
+                        body: test.body
+                    });
+                    
+                    const result = await response.text();
+                    results.push({
+                        name: test.name,
+                        endpoint: test.endpoint,
+                        status: response.status,
+                        success: response.ok,
+                        result: result
+                    });
+                } catch (error) {
+                    results.push({
+                        name: test.name,
+                        endpoint: test.endpoint,
+                        status: 'ERROR',
+                        success: false,
+                        result: error.message
+                    });
+                }
+            }
+            
+            // 显示测试结果
+            let output = '📩 所有接口测试结果\n';
+            output += '================================\n\n';
+            
+            results.forEach((result, index) => {
+                output += `${index + 1}. ${result.name}\n`;
+                output += `   接口: ${result.endpoint}\n`;
+                output += `   状态: ${result.success ? '✅' : '❌'} ${result.status}\n`;
+                output += `   响应: ${result.result.substring(0, 200)}${result.result.length > 200 ? '...' : ''}\n`;
+                output += '\n';
+            });
+            
+            const successCount = results.filter(r => r.success).length;
+            output += `\n📊 测试统计: ${successCount}/${results.length} 个接口测试成功`;
+            
+            resultContent.innerHTML = `<pre style="white-space: pre-wrap;">${output}</pre>`;
+        }
+
+        // 键盘快捷键支持
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 'Enter':
+                        e.preventDefault();
+                        document.getElementById('convertForm').dispatchEvent(new Event('submit'));
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        generateSampleData();
+                        break;
+                    case 'l':
+                        e.preventDefault();
+                        clearForm();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

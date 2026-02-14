@@ -1,0 +1,140 @@
+# ===========================================
+# 文件预览服务配置 - 开发环境
+# ===========================================
+# 说明：开发环境配置与通用默认保持一致，便于本地开发调试
+
+# 服务基础配置
+server:
+  port: 8184
+  servlet:
+    context-path: 
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: false
+
+# Spring应用配置
+spring:
+  application:
+    name: fileview-preview
+
+  # Redis配置
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: 
+      timeout: 10000ms
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: -1ms
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+      write-date-timestamps-as-nanoseconds: false
+    deserialization:
+      read-date-timestamps-as-nanoseconds: false
+
+mq:
+  engine: ${MQ_ENGINE:redis} # 优先使用环境变量 MQ_ENGINE，未设置时默认 redis
+
+# RocketMQ配置
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: preview-producer-group
+    send-message-timeout: 30000
+    retry-times-when-send-failed: 3
+    retry-times-when-send-async-failed: 3
+    max-message-size: 4194304
+    access-channel: LOCAL
+  consumer:
+    group: preview-consumer-group
+    consume-timeout: 30000
+    consume-thread-min: 5
+    consume-thread-max: 20
+
+# 文件预览配置
+fileview:
+  # 文件存储服务配置
+  storage:
+    type: local
+    local:
+      base-path: d:/myWorkSpace/fileview-backend/fileTemp
+      path-mapping:
+        enabled: false
+        from: /opt/fileview/logs/preview
+        to: d:/myWorkSpace/fileview-backend
+    remote:
+      server-url: http://file-server:8080
+      access-key: 
+      secret-key:
+      timeout: 30000
+    oss:
+      provider: aliyun
+      access-key: 
+      secret-key: 
+      bucket: fileview-storage
+      endpoint: oss-cn-hangzhou.aliyuncs.com
+      url-expiration-hours: 1
+      
+  preview:
+    url:
+      base-url: http://127.0.0.1:8184
+      expiration-hours: 24
+      
+    cache:
+      enabled: true
+      default-ttl-hours: 24
+      max-cache-size: 1000
+      
+    polling:
+      default-timeout: 20
+      max-timeout: 300
+      default-interval: 1000
+      min-interval: 500
+      max-interval: 5000
+      smart-strategy:
+        phase1-attempts: 10
+        phase1-interval: 1000
+        phase2-attempts: 20
+        phase2-interval: 2000
+        phase3-interval: 5000
+      
+    storage:
+      preview-dir: /opt/fileview/data/preview
+      temp-dir: /opt/fileview/data/temps
+      upload-dir: /opt/fileview/data/uploads
+      download-dir: /opt/fileview/data/downloads
+      uncompress-dir: /opt/fileview/data/uncompress
+      max-file-size-mb: 100
+    
+    convert-service:
+      url: http://127.0.0.1:8183
+      timeout: 120000
+      retry-count: 3
+    
+    security:
+      password:
+        ttlSeconds: 1800
+        crypto:
+          secret: preview-default-secret-key-change-in-production
+  
+  network:
+    download:
+      connect-timeout: 5000
+      read-timeout: 120000
+      max-retry: 5
+      retry-base-delay: 500
+      buffer-size: 131072
+    security:
+      trusted-sites: 
+      untrusted-sites:

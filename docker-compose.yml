@@ -1,0 +1,43 @@
+services:
+  dev-env:
+    image: basemetas/baseimage:1.2.0
+    container_name: fileview-backend
+    restart: unless-stopped
+    ports:
+      # - "80:80" # Nginx
+      # - "5173:5173" # 前端 dev server
+      # - "8080:8181" # 应用接口
+      - "8183:8183" # 文件转换服务接口
+      - "8184:8184"
+      - "6379:6379" # Redis
+      # - "9876:9876" # RocketMQ NameServer
+      # - "10911:10911" # RocketMQ Broker
+    environment:
+      DEVUSER_PASSWORD: ${DEVUSER_PASSWORD:-dev123} # devuser 远程密码
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: Asia/Shanghai
+      NODE_ENV: development
+      ROCKETMQ_HOME: /usr/local/rocketmq
+      # 单容器模式，NameServer 和 Broker 都在 localhost
+      ROCKETMQ_BROKER_IP: 127.0.0.1
+      # 添加字体和无头环境支持
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      LC_CTYPE: en_US.UTF-8
+      JAVA_OPTS: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 -Djava.awt.headless=true -Duser.timezone=Asia/Shanghai -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true"
+    volumes:
+      - ./.storage/data/redis:/var/lib/redis
+      - ./.storage/logs/redis:/var/log/redis
+      - ./.storage/data/rocketmq:/usr/local/rocketmq/store
+      - ./.storage/logs/rocketmq:/usr/local/rocketmq/logs
+      - ./.storage/nginx-conf:/etc/nginx/conf.d # 挂载 nginx 配置目录
+      - ./fonts:/usr/share/fonts # 挂载字体目录
+      - ./:/var/app/fileview-backend
+      - ./.release/opt/fileview:/opt/fileview
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: ["/usr/local/bin/start-services.sh"]

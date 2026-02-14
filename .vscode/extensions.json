@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-boot-dev-pack",
+        "vscjava.vscode-java-debug",
+        "redhat.vscode-xml",
+        "ms-vscode-remote.remote-containers",
+        "esbenp.prettier-vscode"
+    ]
+}

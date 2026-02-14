@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件预览 - 智能轮询示例</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.loading {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #28a745);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .log {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .timestamp {
+            color: #6c757d;
+            margin-right: 10px;
+        }
+        .preview-result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            display: none;
+        }
+        .preview-url {
+            word-break: break-all;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .preview-url:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 文件预览服务 - 智能轮询示例</h1>
+        
+        <div class="form-group">
+            <label for="fileId">文件ID：</label>
+            <input type="text" id="fileId" placeholder="输入文件ID，例如：file_12345" value="test_document_001">
+        </div>
+        
+        <div class="form-group">
+            <label for="filePath">文件路径：</label>
+            <input type="text" id="filePath" placeholder="输入服务器文件路径" value="/path/to/document.docx">
+        </div>
+        
+        <div class="form-group">
+            <label for="pollType">轮询类型：</label>
+            <select id="pollType">
+                <option value="long">长轮询（推荐）</option>
+                <option value="quick">快速轮询</option>
+                <option value="smart">智能轮询</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="timeout">超时时间（秒）：</label>
+            <input type="number" id="timeout" min="5" max="300" value="60">
+        </div>
+        
+        <button onclick="startPreview()" id="startBtn">🚀 开始预览</button>
+        <button onclick="stopPolling()" id="stopBtn" disabled>⏹️ 停止轮询</button>
+        <button onclick="clearLog()" id="clearBtn">🗑️ 清除日志</button>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="progress-bar" id="progressBar" style="display: none;">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div id="previewResult" class="preview-result"></div>
+        
+        <div class="log" id="log">
+            <div class="log-entry">
+                <span class="timestamp">[系统]</span>
+                <span>智能轮询系统已就绪，请输入文件信息并开始预览</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let pollingInterval = null;
+        let isPolling = false;
+        let pollCount = 0;
+        let startTime = null;
+        
+        // 日志记录函数
+        function addLog(message, type = 'info') {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+            
+            entry.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                <span>${icon} ${message}</span>
+            `;
+            
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // 显示状态
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+        
+        // 更新进度条
+        function updateProgress(percent) {
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            
+            if (percent >= 0) {
+                progressBar.style.display = 'block';
+                progressFill.style.width = percent + '%';
+            } else {
+                progressBar.style.display = 'none';
+            }
+        }
+        
+        // 显示预览结果
+        function showPreviewResult(response) {
+            const resultDiv = document.getElementById('previewResult');
+            
+            if (response.status === 'SUCCESS') {
+                resultDiv.innerHTML = `
+                    <h3>🎉 预览生成成功！</h3>
+                    <p><strong>预览URL:</strong> <a href="${response.previewUrl}" target="_blank" class="preview-url">${response.previewUrl}</a></p>
+                    <p><strong>文件类型:</strong> ${response.originalFileType} → ${response.previewFileType}</p>
+                    <p><strong>预览模式:</strong> ${response.mode}</p>
+                    <p><strong>处理耗时:</strong> ${response.processingDuration}ms</p>
+                    <p><strong>缓存状态:</strong> ${response.fromCache ? '来自缓存' : '新生成'}</p>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        }
+        
+        // 开始预览
+        async function startPreview() {
+            const fileId = document.getElementById('fileId').value.trim();
+            const filePath = document.getElementById('filePath').value.trim();
+            
+            if (!fileId || !filePath) {
+                showStatus('请输入文件ID和文件路径', 'error');
+                return;
+            }
+            
+            // 重置状态
+            isPolling = true;
+            pollCount = 0;
+            startTime = Date.now();
+            
+            // 更新按钮状态
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            addLog(`开始处理文件预览请求 - FileId: ${fileId}`);
+            showStatus('正在发起预览请求...', 'loading');
+            updateProgress(0);
+            
+            try {
+                // 1. 发起预览请求
+                const response = await fetch('/preview/api/preview/server-file', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `fileId=${encodeURIComponent(fileId)}&filePath=${encodeURIComponent(filePath)}`
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                addLog(`预览请求响应: ${result.status} - ${result.message}`);
+                
+                if (result.status === 'SUCCESS') {
+                    // 直接成功
+                    showStatus('预览生成成功！', 'success');
+                    showPreviewResult(result);
+                    updateProgress(100);
+                    stopPolling();
+                } else if (result.status === 'CONVERTING') {
+                    // 需要轮询等待
+                    showStatus('文件正在转换中，开始轮询...', 'loading');
+                    startPolling(fileId);
+                } else {
+                    // 失败
+                    showStatus(`预览请求失败: ${result.message}`, 'error');
+                    stopPolling();
+                }
+                
+            } catch (error) {
+                addLog(`预览请求失败: ${error.message}`, 'error');
+                showStatus(`预览请求失败: ${error.message}`, 'error');
+                stopPolling();
+            }
+        }
+        
+        // 开始轮询
+        function startPolling(fileId) {
+            const pollType = document.getElementById('pollType').value;
+            const timeout = parseInt(document.getElementById('timeout').value) || 60;
+            
+            if (pollType === 'long') {
+                // 长轮询
+                startLongPolling(fileId, timeout);
+            } else if (pollType === 'quick') {
+                // 快速轮询
+                startQuickPolling(fileId);
+            } else {
+                // 智能轮询
+                startSmartPolling(fileId, timeout);
+            }
+        }
+        
+        // 长轮询
+        async function startLongPolling(fileId, timeout) {
+            addLog(`开始长轮询 - 超时时间: ${timeout}秒`);
+            
+            try {
+                const response = await fetch(`/preview/api/preview/status/${fileId}/poll?timeout=${timeout}&interval=1000`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                handlePollingResult(result);
+                
+            } catch (error) {
+                if (isPolling) {
+                    addLog(`长轮询失败: ${error.message}`, 'error');
+                    showStatus(`长轮询失败: ${error.message}`, 'error');
+                    stopPolling();
+                }
+            }
+        }
+        
+        // 快速轮询
+        function startQuickPolling(fileId) {
+            addLog('开始快速轮询 - 每2秒检查一次');
+            
+            pollingInterval = setInterval(async () => {
+                if (!isPolling) return;
+                
+                pollCount++;
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                
+                try {
+                    const response = await fetch(`/preview/api/preview/status/${fileId}/quick`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    addLog(`快速轮询 #${pollCount} (${elapsed}s): ${result.status}`);
+                    
+                    if (result.status === 'SUCCESS') {
+                        handlePollingResult(result);
+                    } else {
+                        updateProgress(Math.min(elapsed * 2, 90)); // 模拟进度
+                    }
+                    
+                } catch (error) {
+                    addLog(`快速轮询 #${pollCount} 失败: ${error.message}`, 'error');
+                }
+            }, 2000);
+        }
+        
+        // 智能轮询（自适应间隔）
+        function startSmartPolling(fileId, maxTime) {
+            addLog('开始智能轮询 - 自适应间隔');
+            
+            let currentInterval = 1000; // 初始1秒
+            
+            const poll = async () => {
+                if (!isPolling) return;
+                
+                pollCount++;
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                
+                if (elapsed >= maxTime) {
+                    addLog('智能轮询超时', 'warning');
+                    showStatus('轮询超时，转换可能仍在进行中', 'error');
+                    stopPolling();
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/preview/api/preview/status/${fileId}/quick`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    addLog(`智能轮询 #${pollCount} (${elapsed}s, 间隔${currentInterval}ms): ${result.status}`);
+                    
+                    if (result.status === 'SUCCESS') {
+                        handlePollingResult(result);
+                        return;
+                    }
+                    
+                    // 自适应调整间隔
+                    if (pollCount < 10) {
+                        currentInterval = 1000;  // 前10次: 1秒
+                    } else if (pollCount < 30) {
+                        currentInterval = 2000;  // 第11-30次: 2秒
+                    } else {
+                        currentInterval = 5000;  // 30次之后: 5秒
+                    }
+                    
+                    updateProgress(Math.min(elapsed * 1.5, 90)); // 模拟进度
+                    
+                    // 安排下次轮询
+                    setTimeout(poll, currentInterval);
+                    
+                } catch (error) {
+                    addLog(`智能轮询 #${pollCount} 失败: ${error.message}`, 'error');
+                    setTimeout(poll, currentInterval);
+                }
+            };
+            
+            poll(); // 开始第一次轮询
+        }
+        
+        // 处理轮询结果
+        function handlePollingResult(result) {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            
+            if (result.status === 'SUCCESS') {
+                addLog(`预览生成完成！总耗时: ${elapsed}秒`, 'success');
+                showStatus('预览生成成功！', 'success');
+                showPreviewResult(result);
+                updateProgress(100);
+                stopPolling();
+            } else if (result.status === 'FAILED') {
+                addLog(`预览生成失败: ${result.message}`, 'error');
+                showStatus(`预览生成失败: ${result.message}`, 'error');
+                stopPolling();
+            } else {
+                // 仍在转换中
+                showStatus(`转换进行中... (已等待${elapsed}秒)`, 'loading');
+            }
+        }
+        
+        // 停止轮询
+        function stopPolling() {
+            isPolling = false;
+            
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            
+            // 更新按钮状态
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            updateProgress(-1); // 隐藏进度条
+        }
+        
+        // 清除日志
+        function clearLog() {
+            const log = document.getElementById('log');
+            log.innerHTML = `
+                <div class="log-entry">
+                    <span class="timestamp">[系统]</span>
+                    <span>日志已清除</span>
+                </div>
+            `;
+            
+            // 隐藏结果
+            document.getElementById('previewResult').style.display = 'none';
+        }
+        
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            addLog('页面加载完成，智能轮询系统已就绪');
+        });
+        
+        // 页面卸载时停止轮询
+        window.addEventListener('beforeunload', function() {
+            stopPolling();
+        });
+    </script>
+</body>
+</html>

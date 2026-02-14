@@ -1,0 +1,13 @@
+{
+  "name": "文件预览后端[社区版]",
+  // 指定使用 docker compose 文件
+  "dockerComposeFile": "../docker-compose.yml", // 相对于 .devcontainer 文件夹的路径
+  // 指定哪个服务作为开发容器
+  "service": "dev-env", // 替换为你的 docker-compose.yml 中定义的服务名
+  "workspaceFolder": "/var/app/fileview-backend", // 容器内的工作目录，通常与 volumes 映射的目录一致
+  // 其他自定义设置...
+  "containerUser": "root",
+  "mounts": [
+    "source=${localWorkspaceFolder}/.m2,target=/root/.m2,type=bind"
+  ]
+}

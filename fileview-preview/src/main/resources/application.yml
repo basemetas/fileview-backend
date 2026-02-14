@@ -1,0 +1,196 @@
+# ===========================================
+# 文件预览服务配置
+# ===========================================
+
+# 服务基础配置
+server:
+  port: 8184
+  servlet:
+    context-path: 
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: false
+
+# Spring应用配置
+spring:
+  application:
+    name: fileview-preview
+
+  # Redis配置
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: 
+      timeout: 10000ms             # 命令超时（改为10秒，支持 Redis Streams block 操作）
+      database: 0
+      lettuce:
+        pool:
+          max-active: 16          # 最大连接数（优化：20 → 16）
+          max-idle: 8             # 最大空闲连接（优化：10 → 8）
+          min-idle: 2             # 最小空闲连接（优化：5 → 2，预热）
+          max-wait: 200ms         # 从池中借连接的等待超时（优化：-1ms → 200ms）
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd'T'HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+      write-date-timestamps-as-nanoseconds: false
+    deserialization:
+      read-date-timestamps-as-nanoseconds: false
+
+mq:
+  engine: ${MQ_ENGINE:redis} # 优先使用环境变量 MQ_ENGINE，未设置时默认 redis
+  redis:
+    stream:
+      max-length: 50000  # Stream 最大长度（使用 MAXLEN ~ 策略防止内存无限膨胀）
+      trim-length: 10000  # 定期清理保留长度（每小时执行，保留最近 N 条已确认消息）
+
+# RocketMQ配置
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: preview-producer-group
+    send-message-timeout: 30000
+    retry-times-when-send-failed: 3
+    retry-times-when-send-async-failed: 3
+    max-message-size: 4194304
+    access-channel: LOCAL
+  consumer:
+    group: preview-consumer-group
+    consume-timeout: 30000
+    consume-thread-min: 5
+    consume-thread-max: 20
+
+# 文件预览配置
+fileview:
+  # 文件存储服务配置
+  storage:
+    # 存储类型: local(本地存储), remote(远程文件服务器), oss(对象存储)
+    type: local
+    # 本地存储配置
+    local:
+      # 基础路径 
+      base-path: d:/myWorkSpace/fileview-backend/fileTemp
+      # 是否启用路径映射(用于Docker容器与宿主机路径转换)
+      path-mapping:
+        enabled: false
+        # 容器内路径前缀
+        from: /var/app/fileview-backend
+        # Windows宿主机路径前缀
+        to: d:/myWorkSpace/fileview-backend
+    # 远程文件服务器配置
+    remote:
+      # 文件服务器地址
+      server-url: http://file-server:8080
+      # 访问密钥(可选)
+      access-key: 
+      secret-key:
+      # 连接超时时间(毫秒)
+      timeout: 30000
+    # OSS对象存储配置
+    oss:
+      # OSS类型: aliyun, aws-s3, minio
+      provider: aliyun
+      # 访问密钥
+      access-key: 
+      secret-key: 
+      # Bucket名称
+      bucket: fileview-storage
+      # Endpoint地址
+      endpoint: oss-cn-hangzhou.aliyuncs.com
+      # 预签名URL过期时间(小时)
+      url-expiration-hours: 1
+      
+  preview:
+    # 预览URL配置
+    url:
+      base-url: http://127.0.0.1:8184
+      expiration-hours: 24
+      
+    # 缓存配置
+    cache:
+      enabled: true
+      default-ttl-hours: 24
+      max-cache-size: 1000
+      # 转换结果缓存TTL（秒）
+      conversion:
+        success-ttl: 86400  # 转换成功缓存时间：24小时
+        failed-ttl: 60      # 转换失败缓存时间：60秒
+      # 直接预览缓存TTL（秒）
+      direct-preview-ttl: 86400  # 直接预览缓存时间：24小时
+      
+    # 轮询策略配置
+    polling:
+      # 基础配置
+      default-timeout: 20          # 默认超时时间（秒）
+      max-timeout: 300             # 最大超时时间（秒）
+      default-interval: 1000       # 默认检查间隔（毫秒）
+      min-interval: 500            # 最小检查间隔（毫秒）
+      max-interval: 5000           # 最大检查间隔（毫秒）
+      
+      # 智能轮询策略
+      smart-strategy:
+        phase1-attempts: 10        # 第一阶段尝试次数（1秒间隔）
+        phase1-interval: 1000      # 第一阶段间隔（毫秒）
+        phase2-attempts: 20        # 第二阶段尝试次数（2秒间隔）
+        phase2-interval: 2000      # 第二阶段间隔（毫秒）
+        phase3-interval: 5000      # 第三阶段间隔（毫秒）
+      
+    # XLSX特殊预览配置
+    xlsx:
+      # 是否启用智能预览（检测加密：加密走转换，非加密直接预览）
+      smart-preview-enabled: true
+    
+    # 文件存储配置
+    storage:
+      # 预览文件存放目录（可配置）
+      preview-dir: /var/app/fileview-backend/fileTemp/preview
+      temp-dir: /var/app/fileview-backend/fileTemp/temps
+      upload-dir: /var/app/fileview-backend/fileTemp/uploads
+      download-dir: /var/app/fileview-backend/fileTemp/downloads
+      # 压缩文件解压临时目录
+      uncompress-dir: /var/app/fileview-backend/fileTemp/source/uncompress
+      max-file-size-mb: 100
+    
+    # 密码与安全配置
+    security:
+      password:
+        # 密码解锁状态TTL（秒）
+        ttlSeconds: 1800
+        # 密码加密密钥（生产环境请使用KMS或配置中心管理）
+        crypto:
+          secret: preview-default-secret-key-change-in-production
+  
+  # 网络文件下载配置
+  network:
+    download:
+      connect-timeout: 5000      # 连接超时5秒（优化：3秒→5秒，弱网环境更宽容）
+      read-timeout: 120000       # 读取超时120秒（优化：60秒→120秒，大文件/慢速网络）
+      max-retry: 5               # 最大重试次数（优化：3→5，提升成功率15-25%）
+      retry-base-delay: 500      # 重试基础延迟（优化：300ms→500ms，指数退避更稳定）
+      buffer-size: 131072        # 缓冲区大小128KB（优化：64KB→128KB，减少IO次数）
+      smart-enabled: true        # 智能下载全局开关（默认启用）
+      smart:
+        # SmartDownload 黑名单域名（响应慢或不支持 HEAD 的站点）
+        blacklist-domains: test.moqisoft.com
+        # 小文件阈值（字节），低于此值跳过 HEAD 直接 GET
+        small-file-threshold: 1048576  # 1MB
+    # 网络文件URL安全配置
+    security:
+      # 信任站点列表（白名单），多个用','隔开，为空则不限制
+      # 示例：example.com,trusted-site.com,*.mycompany.com
+      trusted-sites: 
+      # 不信任站点列表（黑名单），多个用','隔开，为空则不限制
+      # 示例：malicious.com,untrusted.net
+      untrusted-sites:
+  
+  # 压缩文件解压配置
+  archive:
+    # 解压缓冲区大小（字节）
+    buffer-size: 8192
+    # 单个解压文件大小上限（字节），默认100MB
+    max-file-size: 104857600

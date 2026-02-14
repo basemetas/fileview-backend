@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "文件转换服务",
+      "request": "launch",
+      "mainClass": "com.fileview.convert.FileConvertApplication",
+      "projectName": "fileview-convert",
+      "cwd": "${workspaceFolder}/fileview-convert",
+      "args": [],
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "java",
+      "name": "文件预览服务",
+      "request": "launch",
+      "mainClass": "com.fileview.preview.FilePreviewApplication",
+      "projectName": "fileview-preview",
+      "cwd": "${workspaceFolder}/fileview-preview",
+      "args": [],
+      "console": "integratedTerminal"
+    }
+  ]
+}

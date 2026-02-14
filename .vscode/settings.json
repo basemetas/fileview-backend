@@ -1,0 +1,6 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.debug.logLevel": "verbose",
+    "java.compile.nullAnalysis.mode": "automatic"
+
+}

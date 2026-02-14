@@ -1,0 +1,172 @@
+# ===========================================
+# 文件转换服务配置 - 开发环境
+# ===========================================
+# 说明：开发环境配置与通用默认保持一致，便于本地开发调试
+
+server:
+  port: 8183
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: file-convert-service
+  h2:
+    console:
+      enabled: false
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    timeout: 10000ms
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+  web:
+    resources:
+      static-locations: classpath:/static/
+      cache-period: 0
+  cloud:
+    openfeign:
+      client-config:
+        default:
+          connect-timeout: 5000
+          read-timeout: 10000
+
+mq:
+  engine: ${MQ_ENGINE:redis} # 优先使用环境变量 MQ_ENGINE，未设置时默认 redis
+
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: file-convert-producer
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 2
+    retry-times-when-send-async-failed: 2
+    max-message-size: 4194304
+  consumer:
+    group: file-convert-consumer
+
+libreoffice:
+  command:
+    path: /usr/local/bin/soffice
+  temp:
+    dir: /opt/fileview/data/libreoffice
+    cleanup:
+      max-age-hours: 1
+      cron: "0 */15 * * * ?"  # 2C4G优化：每15分钟清理一次
+  conversion:
+    timeout: 120
+  headless: true
+  invisible: true
+  enable: true
+   # 加密文档黑名单（这些格式带密码时不使用 LibreOffice，避免崩溃）
+  encrypted-blacklist: "xls,ppt,dps,dpt"
+  jod:
+    enabled: true
+    office-home: /usr/share/libreoffice
+    port-numbers: 2002,2003
+    max-tasks-per-process: 50  # 2C4G优化：原100降为50
+    task-execution-timeout: 180000  # 2C4G优化：原300秒降为180秒
+    task-queue-timeout: 30000
+    process-timeout: 120000
+    process-retry-interval: 250
+    max-process-count: 1
+
+word:
+  convert:
+    engine:
+      priority: libreoffice
+      fallback: true
+    file:
+      size:
+        threshold: 10485760
+    libreoffice:
+      enable: true
+
+excel:
+  convert:
+    engine:
+      priority: ibreoffice
+      fallback: true
+    file:
+      size:
+        threshold: 50485760
+    libreoffice:
+      enable: true
+
+ppt:
+  convert:
+    engine:
+      priority: libreoffice
+      fallback: true
+    file:
+      size:
+        threshold: 100485760
+    libreoffice:
+      enable: true
+
+visio:
+  convert:
+    engine:
+      priority: libreoffice
+      fallback: true
+    file:
+      size:
+        threshold: 50485760
+    libreoffice:
+      enable: true
+
+cad:
+  convert:
+    cad2x:
+      enable: true
+
+cad2x:
+  converter:
+    path: /opt/fileview/bin/cad2x/cad2x
+  temp:
+    dir: /opt/fileview/data/cad2x
+  conversion:
+    timeout: 120
+  options:
+    center: true
+    encoding:
+    font:
+    fontDirs:
+    page: 2970x2100
+    margins: 2.0,2.0,2.0,2.0
+
+ofd:
+  convert:
+    default-target-format: pdf
+    parallel:
+      min-pages: 3
+      max-threads: 4
+
+# 文件存储配置
+storage:
+  convert-target-dir: /opt/fileview/data/target
+
+
+convert:
+  consumer:
+    message-expire-time: 300000
+    conversion-timeout: 120000
+    # 转换线程池配置（用于控制并发转换任务数，避免资源耗尽）
+    # 2C4G优化：降低线程数减少内存占用
+    conversion-core-pool-size: 2      # 原4降为2
+    conversion-max-pool-size: 4       # 原8降为4
+    conversion-queue-capacity: 100    # 原200降为100
+  engine:
+    health:
+      check:
+        enabled: true
+        cron: "0/30 * * * * ?"
+        ttl: 60
+        lock-timeout: 10
