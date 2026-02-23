@@ -4,9 +4,6 @@ services:
     container_name: fileview-backend
     restart: unless-stopped
     ports:
-      # - "80:80" # Nginx
-      # - "5173:5173" # 前端 dev server
-      # - "8080:8181" # 应用接口
       - "8183:8183" # 文件转换服务接口
       - "8184:8184"
       - "6379:6379" # Redis

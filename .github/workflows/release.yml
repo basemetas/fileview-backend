@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      # -------------------------
+      # 拉代码
+      # -------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -------------------------
+      # 设置 JDK
+      # -------------------------
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # -------------------------
+      # 读取 version.txt
+      # -------------------------
+      - name: Get file version
+        id: file
+        run: |
+          VERSION=$(cat version.txt | tr -d ' \n')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # 获取当前 tag
+      # -------------------------
+      - name: Get tag version
+        id: tag
+        run: |
+          RAW_TAG=${GITHUB_REF#refs/tags/}
+          TAG=${RAW_TAG#v}
+          echo "raw_tag=$RAW_TAG" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # 校验 tag 格式 vX.Y.Z
+      # -------------------------
+      - name: Validate tag format
+        run: |
+          if [[ ! "${{ steps.tag.outputs.raw_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid tag format. Use vX.Y.Z"
+            exit 1
+          fi
+
+      # -------------------------
+      # 校验 version.txt 与 tag 一致
+      # -------------------------
+      - name: Validate version match
+        run: |
+          if [ "${{ steps.file.outputs.version }}" != "${{ steps.tag.outputs.tag }}" ]; then
+            echo "❌ Tag version does not match version.txt"
+            exit 1
+          fi
+          echo "✅ Version matched"
+
+      # -------------------------
+      # 执行 deploy.sh
+      # -------------------------
+      - name: Grant permission
+        run: chmod +x deploy.sh
+
+      - name: Run deploy
+        run: ./deploy.sh
+
+      # -------------------------
+      # 清理旧包
+      # -------------------------
+      - name: Clean old artifacts
+        run: rm -f fileview-backend-*.zip*
+
+      # -------------------------
+      # 打包 .release/opt/fileview
+      # -------------------------
+      - name: Zip release folder
+        run: |
+          cd .release/opt
+          zip -r fileview-backend-v${{ steps.file.outputs.version }}.zip fileview
+
+      # -------------------------
+      # 生成 SHA256
+      # -------------------------
+      - name: Generate SHA256
+        run: |
+          cd .release/opt
+          sha256sum fileview-backend-v${{ steps.file.outputs.version }}.zip \
+            > fileview-backend-v${{ steps.file.outputs.version }}.zip.sha256
+
+      # -------------------------
+      # 生成 CHANGELOG
+      # -------------------------
+      - name: Generate changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            git log --pretty=format:"- %s" > CHANGELOG.md
+          else
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s" > CHANGELOG.md
+          fi
+
+          echo "" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "Build Time: $(date -u)" >> CHANGELOG.md
+
+      # -------------------------
+      # 创建 GitHub Release
+      # -------------------------
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.file.outputs.version }}
+          name: v${{ steps.file.outputs.version }}
+          body_path: CHANGELOG.md
+          files: |
+            .release/opt/fileview-backend-v${{ steps.file.outputs.version }}.zip
+            .release/opt/fileview-backend-v${{ steps.file.outputs.version }}.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
