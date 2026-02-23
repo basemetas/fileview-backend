@@ -9,7 +9,7 @@
   <a href="https://github.com/BaseMetas/fileview-backend"><img src="https://img.shields.io/github/actions/workflow/status/basemetas/fileview-backend/lint.yml?branch=main&style=flat-square&label=lint" alt="lint"></a>
 </div>
 
-## 主项目仓库
+## 项目主仓库
 
 https://github.com/BaseMetas/fileview
 
