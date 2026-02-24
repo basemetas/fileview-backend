@@ -33,9 +33,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 基础转换控制器
- * 本地文件转换功能和健康检查
+ * 基础转换控制器(不对外开放，用于内部测试)
+ * 本地文件转换功能和健康检查接口
  * 
+ * @author 夫子
  * @version 2.0
  */
 @RestController

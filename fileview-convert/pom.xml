@@ -253,8 +253,6 @@
                         <exclude>logback-spring.xml</exclude>
                         <!-- 排除cad2x目录 -->
                         <exclude>cad2x/**</exclude>
-                        <!-- 排除x2t目录 -->
-                        <exclude>x2t/**</exclude>
                         <!-- 排除Dockerfile -->
                         <exclude>Dockerfile*</exclude>
                         <!-- 排除.dockerignore -->

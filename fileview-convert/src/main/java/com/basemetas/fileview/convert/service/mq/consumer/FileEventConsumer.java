@@ -21,6 +21,7 @@ import com.basemetas.fileview.convert.service.mq.event.FileEvent;
 import com.basemetas.fileview.convert.strategy.FileConvertContext;
 import com.basemetas.fileview.convert.utils.FileUtils;
 import com.basemetas.fileview.convert.service.cache.ConvertResultCacheStrategy;
+import com.basemetas.fileview.convert.common.exception.UnsupportedException;
 import com.basemetas.fileview.convert.config.FileTypeMapper;
 import com.basemetas.fileview.convert.model.ConvertResultInfo;
 import org.slf4j.Logger;
@@ -310,7 +311,7 @@ public class FileEventConsumer {
                     // 统一调用带参数的转换方法
                     return fileConvertContext.convertFileWithParams(finalFileType, filePath, targetPath, 
                             targetFileName, targetFormat, convertParams);
-                } catch (com.basemetas.fileview.convert.common.exception.UnsupportedException e) {
+                } catch (UnsupportedException e) {
                     // 🔑 关键修复：引擎不支持异常需要重新抛出，让 ExecutionException 捕获
                     logger.warn("⚠️ CompletableFuture 中捕获到引擎不支持异常，重新抛出 - ErrorCode: {}", e.getErrorCode());
                     throw e; // 重新抛出，让外层的 ExecutionException 捕获
@@ -337,22 +338,14 @@ public class FileEventConsumer {
                 Throwable cause = e.getCause();
                 if (cause != null) {
                     // 检查是否为引擎能力不支持异常
-                    if (cause instanceof com.basemetas.fileview.convert.common.exception.UnsupportedException) {
-                        com.basemetas.fileview.convert.common.exception.UnsupportedException ex = 
-                            (com.basemetas.fileview.convert.common.exception.UnsupportedException) cause;
+                    if (cause instanceof UnsupportedException) {
+                        UnsupportedException ex = 
+                            (UnsupportedException) cause;
                         logger.warn("⚠️ 转换引擎不支持 - FileId: {}, ErrorCode: {}, Message: {}",
                                    fileEvent.getFileId(), ex.getErrorCode(), ex.getMessage());
                         convertResultInfo.markConversionFailed(ex.getMessage(), duration);
                         convertResultInfo.setErrorCode(ex.getErrorCode());
-                    }
-                    // 检查是否为Windows环境下的字体管理器错误
-                    else if (isWindowsFontError(cause)) {
-                        logger.error("❗ 检测到Windows环境下的字体管理器错误: {}", fileEvent.getTargetFileName());
-                        logger.error("错误详情: {}", cause.getMessage());
-                        logger.error("建议: 请检查Java运行环境是否支持无头模式，或者联系管理员解决字体系统问题");
-                        convertResultInfo.markConversionFailed("Windows字体系统错误: " + cause.getMessage(), duration);
-                        publishWindowsFontErrorEvent(fileEvent, cause.getMessage(), duration, convertResultInfo);
-                    } else {
+                    }else {
                         logger.error("❗ 文件转换执行异常: {}", fileEvent.getTargetFileName(), cause);
                         convertResultInfo.markConversionFailed(cause.getMessage(), duration);
                     }
@@ -576,56 +569,6 @@ public class FileEventConsumer {
         } catch (Exception e) {
             logger.error("❌ 发送转换失败事件失败 - FileId: {}", originalEvent.getFileId(), e);
         }
-    }
-
-    /**
-     * 检查是否为Windows环境下的字体管理器错误
-     */
-    private boolean isWindowsFontError(Throwable cause) {
-        if (cause == null) {
-            return false;
-        }
-
-        String osName = System.getProperty("os.name").toLowerCase();
-        if (!osName.contains("windows")) {
-            return false;
-        }
-
-        String message = cause.getMessage();
-        if (message != null) {
-            return message.contains("HeadlessFontManager") ||
-                    message.contains("sun.awt.HeadlessFontManager") ||
-                    message.contains("FontManagerFactory") ||
-                    message.contains("FontLoader") ||
-                    message.contains("GraphicsEnvironment") ||
-                    message.contains("createFont") ||
-                    message.contains("loadFont") ||
-                    message.contains("scanFontDir");
-        }
-
-        // 检查异常类型
-        String className = cause.getClass().getSimpleName();
-        return className.contains("InternalError") ||
-                className.contains("HeadlessException") ||
-                (className.contains("ClassNotFoundException") &&
-                        cause.getMessage() != null &&
-                        cause.getMessage().contains("HeadlessFontManager"));
-    }
-
-    /**
-     * 发布Windows字体错误事件
-     */
-    private void publishWindowsFontErrorEvent(FileEvent originalEvent, String errorMessage, long duration,
-            ConvertResultInfo convertResultInfo) {
-        logger.warn("📢 发布Windows字体错误事件: {}, 错误: {}",
-                originalEvent.getTargetFileName(), errorMessage);
-        logger.warn("🛠️ 建议解决方案:");
-        logger.warn("   1. 检查Java JVM的-Djava.awt.headless=true参数是否正确设置");
-        logger.warn("   2. 确保在Windows服务器环境下运行时使用无头模式");
-        logger.warn("   3. 联系系统管理员检查Java字体系统配置");
-
-        // 这里可以发送特定的Windows字体错误通知
-        publishConversionFailureEvent(originalEvent, convertResultInfo);
     }
 
     /**

@@ -15,8 +15,6 @@
  */
 package com.basemetas.fileview.convert.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import jakarta.annotation.PostConstruct;
@@ -34,9 +32,7 @@ import java.util.*;
  */
 @Component
 public class FileTypeMapper {
-    
-    private static final Logger logger = LoggerFactory.getLogger(FileTypeMapper.class);
-    
+        
     /**
      * 扩展名到文件类别的映射
      */

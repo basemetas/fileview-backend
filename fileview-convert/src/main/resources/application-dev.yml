@@ -163,6 +163,12 @@ convert:
     conversion-core-pool-size: 2      # 原4降为2
     conversion-max-pool-size: 4       # 原8降为4
     conversion-queue-capacity: 100    # 原200降为100
+  # 缓存配置
+  cache:
+    ttl:
+      converting: 600      # 转换中缓存TTL（秒，默认10分钟）
+      success: 86400       # 转换成功缓存TTL（秒，默认24小时）
+      failed: 60           # 转换失败缓存TTL（秒，默认60秒，允许快速重试）
   engine:
     health:
       check:

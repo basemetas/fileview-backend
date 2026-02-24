@@ -15,16 +15,11 @@
  */
 package com.basemetas.fileview.convert.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
-
 import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * OFD字体配置属性
@@ -36,8 +31,6 @@ import java.util.Map;
 @Component
 @ConfigurationProperties(prefix = "ofd.font")
 public class OfdFontProperties {
-
-    private static final Logger logger = LoggerFactory.getLogger(OfdFontProperties.class);
 
     /**
      * 字体目录扫描路径（多个路径用逗号分隔）

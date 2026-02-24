@@ -17,7 +17,6 @@ package com.basemetas.fileview.convert.model.response;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;

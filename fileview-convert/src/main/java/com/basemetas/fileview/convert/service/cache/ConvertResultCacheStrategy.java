@@ -19,9 +19,9 @@ import com.basemetas.fileview.convert.model.ConvertResultInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
 /**
@@ -48,10 +48,15 @@ public class ConvertResultCacheStrategy {
     // 缓存键前缀
     private static final String CACHE_PREFIX = "convert:";
 
-    // TTL配置（秒）
-    private static final long CONVERTING_TTL = 600L; // 转换中：10分钟
-    private static final long SUCCESS_TTL = 86400L; // 转换成功：24小时
-    private static final long FAILED_TTL = 60L; // 转换失败：60秒（允许快速重试）
+    // TTL配置（秒）- 从配置文件注入
+    @Value("${convert.cache.ttl.converting:600}")
+    private long convertingTtl; // 转换中：默认10分钟
+
+    @Value("${convert.cache.ttl.success:86400}")
+    private long successTtl; // 转换成功：默认24小时
+
+    @Value("${convert.cache.ttl.failed:60}")
+    private long failedTtl; // 转换失败：默认60秒（允许快速重试）
 
 
     /**
@@ -106,20 +111,20 @@ public class ConvertResultCacheStrategy {
      */
     private long determineTTL(String status) {
         if (status == null) {
-            return FAILED_TTL;
+            return failedTtl;
         }
 
         switch (status.toUpperCase()) {
             case "SUCCESS":
-                return SUCCESS_TTL; // 24小时
+                return successTtl; // 24小时
             case "IN_PROGRESS":
             case "CONVERTING":
-                return CONVERTING_TTL; // 10分钟
+                return convertingTtl; // 10分钟
             case "FAILED":
             case "ERROR":
-                return FAILED_TTL; // 1小时
+                return failedTtl; // 1小时
             default:
-                return CONVERTING_TTL; // 默认使用转换中TTL
+                return convertingTtl; // 默认使用转换中TTL
         }
     }
 
