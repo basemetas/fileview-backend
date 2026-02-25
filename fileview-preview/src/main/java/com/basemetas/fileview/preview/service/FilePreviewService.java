@@ -394,12 +394,8 @@ public class FilePreviewService {
                 // A场景：需要转换
                 // 🔑 如果是加密文件，将 encrypted 信息和密码传递给转换模块
                 if (validationResult != null && validationResult.isEncrypted()) {
-                    // 确保 extendedParams 不为 null
-                    if (request.getExtendedParams() == null) {
-                        request.setExtendedParams(new HashMap<>());
-                    }
-                    // 将 encrypted 状态传递给 request，以便在 processConversionPreview 中使用
-                    request.getExtendedParams().put("encrypted", true);
+                    // 添加 encrypted 标记
+                    request.addExtendedParam("encrypted", true);
 
                     // 🔑 关键修复：将密码传递给转换模块
                     String clientId = request.getClientId();
@@ -491,10 +487,8 @@ public class FilePreviewService {
                 passwordUnlockService.markUnlocked(fileId, clientId, password);
             }
             
-            if (request.getExtendedParams() == null) {
-                request.setExtendedParams(new HashMap<>());
-            }
-            request.getExtendedParams().put("encrypted", true);
+            // 添加 encrypted 标记
+            request.addExtendedParam("encrypted", true);
             request.setPassword(password);
             
             return processConversionPreview(fileId, filePath, fileFormat, fileSize, targetFileName, startTime,

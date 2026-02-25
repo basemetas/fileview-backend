@@ -51,4 +51,18 @@ public class LibreOfficeStatus {
     public void setHeadless(boolean headless) { this.headless = headless; }
     public void setInvisible(boolean invisible) { this.invisible = invisible; }
     public void setTempDir(String tempDir) { this.tempDir = tempDir; }
+    
+    @Override
+    public String toString() {
+        return "LibreOfficeStatus{" +
+                "enabled=" + enabled +
+                ", available=" + available +
+                ", command='" + command + '\'' +
+                ", version='" + version + '\'' +
+                ", timeout=" + timeout + "s" +
+                ", headless=" + headless +
+                ", invisible=" + invisible +
+                ", tempDir='" + tempDir + '\'' +
+                '}';
+    }
 }

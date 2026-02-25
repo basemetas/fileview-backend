@@ -248,7 +248,6 @@ public class FileDownloadService {
         
         // 2. 带指数退避的重试逻辑
         IOException lastException = null;
-        long actualDownloadStart = System.currentTimeMillis();
         for (int attempt = 0; attempt < maxRetry; attempt++) {
             try {
                 long attemptStart = System.currentTimeMillis();
@@ -325,8 +324,8 @@ public class FileDownloadService {
             transferred = outChannel.transferFrom(inChannel, 0, Long.MAX_VALUE);
             long writeTime = System.currentTimeMillis() - writeStart;
             double speedMBps = contentLength > 0 ? (transferred / 1024.0 / 1024.0) / (writeTime / 1000.0) : 0;
-            logger.info("✅ HTTP文件下载完成 - 总计: {} bytes, 写盘耗时: {}ms, 速度: {:.2f} MB/s", 
-                transferred, writeTime, speedMBps);
+            logger.info("✅ HTTP文件下载完成 - 总计: {} bytes, 写盘耗时: {}ms, 速度: {} MB/s", 
+                transferred, writeTime, String.format("%.2f", speedMBps));
         }
         
         // ⭐ 文件完整性校验：对比实际下载大小与Content-Length

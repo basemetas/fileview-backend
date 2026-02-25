@@ -185,7 +185,14 @@ public class EmfConverter {
             // 确保目标目录存在（防御性检查）
             File targetFile = new File(targetPath);
             File targetDir = targetFile.getParentFile();
-            if (targetDir != null && !targetDir.exists()) {
+            
+            // 如果无法获取父目录，使用当前目录
+            if (targetDir == null) {
+                logger.warn("无法获取目标文件的父目录，使用当前目录: {}", targetPath);
+                targetDir = new File(".");
+            }
+            
+            if (!targetDir.exists()) {
                 targetDir.mkdirs();
             }
             

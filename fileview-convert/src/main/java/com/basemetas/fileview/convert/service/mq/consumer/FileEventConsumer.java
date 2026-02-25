@@ -163,17 +163,21 @@ public class FileEventConsumer {
                         fileEvent != null ? fileEvent.getEventType() : "null",
                         e.getMessage(), e);
             // 添加异常处理，确保发送转换失败事件
-            try {
-                // 创建一个转换结果信息对象用于发送失败事件
-                ConvertResultInfo errorResultInfo = new ConvertResultInfo(
-                    fileEvent.getFileId(),
-                    fileEvent.getFilePath(),
-                    fileEvent.getFileType()
-                );
-                errorResultInfo.markConversionFailed("处理文件事件时发生异常: " + e.getMessage(), 0);
-                publishConversionFailureEvent(fileEvent, errorResultInfo);
-            } catch (Exception ex) {
-                logger.error("❌ 发送转换失败事件失败: {}", fileEvent.getFileId(), ex);
+            if (fileEvent != null) {
+                try {
+                    // 创建一个转换结果信息对象用于发送失败事件
+                    ConvertResultInfo errorResultInfo = new ConvertResultInfo(
+                        fileEvent.getFileId(),
+                        fileEvent.getFilePath(),
+                        fileEvent.getFileType()
+                    );
+                    errorResultInfo.markConversionFailed("处理文件事件时发生异常: " + e.getMessage(), 0);
+                    publishConversionFailureEvent(fileEvent, errorResultInfo);
+                } catch (Exception ex) {
+                    logger.error("❌ 发送转换失败事件失败: {}", fileEvent.getFileId(), ex);
+                }
+            } else {
+                logger.error("❌ fileEvent 为 null，无法发送转换失败事件");
             }
         }
     }
@@ -262,7 +266,6 @@ public class FileEventConsumer {
                 fileEvent.getFileType());
         convertResultInfo.setOriginalFileFormat(fileEvent.getSourceFormat());
         convertResultInfo.setOriginalFileName(fileEvent.getFileName());
-        // convertResultInfo.setOriginalFilePath(fileEvent.getFilePath());
         convertResultInfo.setTargetFormat(fileEvent.getTargetFormat());
         convertResultInfo.setOriginalFileSize(fileUtils.getFileSize(fileEvent.getFilePath()));
         // 🔑 关键修复：从事件中读取 encrypted 字段
@@ -345,7 +348,7 @@ public class FileEventConsumer {
                                    fileEvent.getFileId(), ex.getErrorCode(), ex.getMessage());
                         convertResultInfo.markConversionFailed(ex.getMessage(), duration);
                         convertResultInfo.setErrorCode(ex.getErrorCode());
-                    }else {
+                    } else {
                         logger.error("❗ 文件转换执行异常: {}", fileEvent.getTargetFileName(), cause);
                         convertResultInfo.markConversionFailed(cause.getMessage(), duration);
                     }
@@ -511,7 +514,7 @@ public class FileEventConsumer {
             headers.put("eventTag", "CONVERSION_COMPLETED");
 
             EventChannel channel = EventChannel.CONVERT_EVENTS;
-            if (originalEvent.getEventType() == originalEvent.eventType.PREVIEW_REQUESTED) {
+            if (originalEvent.getEventType() == FileEvent.EventType.PREVIEW_REQUESTED) {
                 // 发送到预览服务
                 channel = EventChannel.PREVIEW_EVENTS;
             }
@@ -556,7 +559,7 @@ public class FileEventConsumer {
             headers.put("eventTag", "CONVERSION_COMPLETED");
             
             EventChannel channel = EventChannel.CONVERT_EVENTS;
-            if (originalEvent.getEventType() == originalEvent.eventType.PREVIEW_REQUESTED) {
+            if (originalEvent.getEventType() == FileEvent.EventType.PREVIEW_REQUESTED) {
                 // 发送到预览服务
                 channel = EventChannel.PREVIEW_EVENTS;
             }

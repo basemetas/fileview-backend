@@ -18,9 +18,6 @@ public class CacheConsistencyTest {
     private DownloadTaskManager downloadTaskManager;
     
     @Autowired
-    private CacheReadService cacheReadService;
-    
-    @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
     @Test
@@ -57,9 +54,6 @@ public class CacheConsistencyTest {
         request.setDownloadTargetPath("/tmp/downloads");
         request.setDownloadTimeout(30000);
 
-        // 创建下载任务
-        DownloadTask task = downloadTaskManager.createTask(request);
-        
         // 更新任务状态为处理中
         downloadTaskManager.updateTaskStatus(fileId, DownloadTaskStatus.DOWNLOADING);
         

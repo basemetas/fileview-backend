@@ -17,6 +17,8 @@ package com.basemetas.fileview.preview.service.mq.event;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -289,20 +291,36 @@ public class FilePreviewEvent {
         this.progress = progress;
     }
 
+    /**
+     * 获取扩展参数（防御性拷贝）
+     * @return 扩展参数的不可变副本，如果为null则返回null
+     */
     public Map<String, Object> getExtendedParams() {
-        return extendedParams;
+        return extendedParams == null ? null : Collections.unmodifiableMap(extendedParams);
     }
 
+    /**
+     * 设置扩展参数（防御性拷贝）
+     * @param extendedParams 扩展参数，将创建副本以防止外部修改
+     */
     public void setExtendedParams(Map<String, Object> extendedParams) {
-        this.extendedParams = extendedParams;
+        this.extendedParams = extendedParams == null ? null : new HashMap<>(extendedParams);
     }
     
+    /**
+     * 获取业务参数（防御性拷贝）
+     * @return 业务参数的不可变副本，如果为null则返回null
+     */
     public Map<String, Object> getBusinessParams() {
-        return businessParams;
+        return businessParams == null ? null : Collections.unmodifiableMap(businessParams);
     }
     
+    /**
+     * 设置业务参数（防御性拷贝）
+     * @param businessParams 业务参数，将创建副本以防止外部修改
+     */
     public void setBusinessParams(Map<String, Object> businessParams) {
-        this.businessParams = businessParams;
+        this.businessParams = businessParams == null ? null : new HashMap<>(businessParams);
     }
 
     @Override

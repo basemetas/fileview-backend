@@ -177,7 +177,7 @@ class WordConvertStrategyTest {
             // 验证状态信息的基本属性
             assertNotNull(engineStatus.getPriorityConfig());
             
-            logger.info("转换引擎状态: OnlyOffice可用={}, LibreOffice可用={}, POI可用={}, 故障转移={}, 优先级配置={}", 
+            logger.info("转换引擎状态: LibreOffice可用={}, 故障转移={}, 优先级配置={}", 
                        engineStatus.isLibreOfficeAvailable(),
                        engineStatus.isFallbackEnabled(),
                        engineStatus.getPriorityConfig());

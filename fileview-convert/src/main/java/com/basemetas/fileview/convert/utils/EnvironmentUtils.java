@@ -444,25 +444,25 @@ public class EnvironmentUtils {
                 return;
             }
 
-            // 检查常见的中文字体
-            String[] chineseFontNames = {
-                    "SimSun", "SimHei", "Microsoft YaHei", "WenQuanYi Micro Hei",
-                    "WenQuanYi Zen Hei", "AR PL UMing CN", "AR PL UKai CN",
-                    "Noto Sans CJK SC", "Source Han Sans CN", "DejaVu Sans"
-            };
+            logger.info("系统共有 {} 个字体", fonts.length);
 
+            // 直接遍历系统字体，查找支持中文的字体
             int foundChineseFonts = 0;
-            for (String fontName : chineseFontNames) {
+            for (Font font : fonts) {
                 try {
-                    Font font = new Font(fontName, Font.PLAIN, 12);
                     if (font.canDisplay('中') && font.canDisplay('文')) {
-                        logger.info("✅ 找到可用中文字体: {}", fontName);
+                        logger.info("✅ 找到可用中文字体: {} (Family: {})", 
+                            font.getFontName(), font.getFamily());
                         foundChineseFonts++;
-                    } else {
-                        logger.debug("❌ 字体不支持中文: {}", fontName);
+                        
+                        // 只记录前 10 个，避免日志过多
+                        if (foundChineseFonts >= 10) {
+                            logger.info("... 还有更多中文字体，仅显示前10个");
+                            break;
+                        }
                     }
                 } catch (Exception e) {
-                    logger.debug("检查字体{}时出现异常: {}", fontName, e.getMessage());
+                    // 忽略个别字体检查失败
                 }
             }
 

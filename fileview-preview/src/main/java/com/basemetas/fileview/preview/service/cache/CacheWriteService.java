@@ -339,13 +339,10 @@ public class CacheWriteService {
 
             logger.info("📝 开始更新失败状态到缓存 - CacheKey: {}, ResultKey: {}", cacheKey, resultKey);
 
-            // 2. 读取现有缓存数据
-            Object existingData = redisTemplate.opsForValue().get(cacheKey);
-
             Map<String, Object> cacheData = previewCacheAssembler.buildFailedSimpleConvertCache(
                 fileId, targetFormat, error, errorCode, originalFileFormat);
 
-            // 3. 更新为失败状态
+            // 2. 更新为失败状态
             cacheData.put("mode", "CONVERT");
             cacheData.put("status", "FAILED");
             cacheData.put("error", error != null ? error : "Unknown error");
@@ -362,7 +359,7 @@ public class CacheWriteService {
             // 失败结果保留极短时间(与转换服务保持一致)
             cacheData.put("expiresAt", System.currentTimeMillis() + Duration.ofSeconds(failedTtl).toMillis());
 
-            // 4. 写入主缓存键
+            // 3. 写入主缓存键
             redisTemplate.opsForValue().set(
                     cacheKey,
                     cacheData,
@@ -371,7 +368,7 @@ public class CacheWriteService {
             logger.info("✅ 失败状态已更新到主缓存 - Key: {}, Error: {}, TTL: {}s",
                     cacheKey, error, failedTtl);
 
-            // 5. 同时更新结果缓存
+            // 4. 同时更新结果缓存
             redisTemplate.opsForValue().set(
                     resultKey,
                     cacheData,

@@ -25,8 +25,6 @@ public class LocalFileStorageServiceTest {
     public void testGetPhysicalPathWithMapping() {
         // 测试路径映射
         String inputPath = "/var/app/fileview-backend/fileTemp/preview/temp5.pdf";
-        String expectedPath = "d:/myWorkSpace/fileview-backend/fileTemp/preview/temp5.pdf";
-        
         String result = storageService.getPhysicalPath(inputPath);
         
         // 验证结果不包含重复映射
@@ -94,8 +92,7 @@ public class LocalFileStorageServiceTest {
         // 验证结果应该是正确的Windows路径
         String expectedPath = "d:/myWorkSpace/fileview-backend/fileTemp/preview/temp6.pdf";
         String normalizedResult = result.replace("\\", "/").toLowerCase();
-        String normalizedExpected = expectedPath.toLowerCase();
-        
+
         // 验证结果是否符合预期
         assertTrue(normalizedResult.contains("myworkspace/fileview-backend/filetemp/preview/temp6.pdf"), 
             "结果应该是正确的Windows路径: " + normalizedResult);

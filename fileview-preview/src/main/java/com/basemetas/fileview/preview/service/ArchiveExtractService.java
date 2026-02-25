@@ -24,6 +24,8 @@ import com.basemetas.fileview.preview.utils.FileUtils;
 import com.basemetas.fileview.preview.utils.EnvironmentUtils;
 import com.github.junrar.Archive;
 import com.github.junrar.rarfile.FileHeader;
+
+import net.lingala.zip4j.ZipFile;
 import net.sf.sevenzipjbinding.*;
 import net.sf.sevenzipjbinding.impl.RandomAccessFileInStream;
 import org.apache.commons.compress.archivers.ArchiveEntry;
@@ -196,13 +198,11 @@ public class ArchiveExtractService {
         // 查找最后一个支持的压缩文件扩展名的位置
         String lowerPath = fullPath.toLowerCase();
         int archiveEndIndex = -1;
-        String archiveExtension = null;
         // 优先匹配较长的扩展名（如.tar.gz）
         for (String ext : new String[] { ".tar.gz", ".tar.bz2" }) {
             int index = lowerPath.indexOf(ext);
             if (index >= 0) {
                 archiveEndIndex = index + ext.length();
-                archiveExtension = ext;
                 break;
             }
         }
@@ -212,7 +212,6 @@ public class ArchiveExtractService {
                 int index = lowerPath.indexOf(ext);
                 if (index >= 0) {
                     archiveEndIndex = index + ext.length();
-                    archiveExtension = ext;
                     break;
                 }
             }
@@ -440,65 +439,68 @@ public class ArchiveExtractService {
 
         for (String encoding : encodings) {
             try {
-                net.lingala.zip4j.ZipFile zip4jFile = new net.lingala.zip4j.ZipFile(archiveFile);
-                // 设置字符集
-                zip4jFile.setCharset(java.nio.charset.Charset.forName(encoding));
+                try (ZipFile zip4jFile = new ZipFile(archiveFile)) {
+                    // 设置字符集
+                    zip4jFile.setCharset(java.nio.charset.Charset.forName(encoding));
 
-                // 检查是否加密
-                if (zip4jFile.isEncrypted()) {
-                    if (password == null || password.trim().isEmpty()) {
-                        logger.warn("🔒 ZIP文件已加密，需要密码 - File: {}", archiveFile.getName());
-                        return ExtractResult.passwordRequired("zip", "ZIP文件已加密，需要密码");
+                    // 检查是否加密
+                    if (zip4jFile.isEncrypted()) {
+                        if (password == null || password.trim().isEmpty()) {
+                            logger.warn("🔒 ZIP文件已加密，需要密码 - File: {}", archiveFile.getName());
+                            return ExtractResult.passwordRequired("zip", "ZIP文件已加密，需要密码");
+                        }
+
+                        // 设置密码
+                        zip4jFile.setPassword(password.toCharArray());
+                        logger.debug("🔓 使用密码解密 ZIP 文件 - File: {}", archiveFile.getName());
                     }
 
-                    // 设置密码
-                    zip4jFile.setPassword(password.toCharArray());
-                    logger.debug("🔓 使用密码解密 ZIP 文件 - File: {}", archiveFile.getName());
+                    // 查找目标文件
+                    net.lingala.zip4j.model.FileHeader fileHeader = zip4jFile.getFileHeader(targetFilePath);
+                    if (fileHeader == null) {
+                        // 尝试替换路径分隔符
+                        String normalizedPath = targetFilePath.replace('\\', '/');
+                        fileHeader = zip4jFile.getFileHeader(normalizedPath);
+                    }
+
+                    // 如果找到了文件，进行解压
+                    if (fileHeader != null) {
+                        logger.info("✅ 成功使用编码 {} 找到文件: {}", encoding, fileHeader.getFileName());
+
+                        if (fileHeader.isDirectory()) {
+                            return ExtractResult.failure("目标路径是目录，不是文件: " + targetFilePath);
+                        }
+
+                        // 检查文件大小
+                        if (fileHeader.getUncompressedSize() > maxFileSize) {
+                            return ExtractResult.failure("文件太大，超过限制: " + fileHeader.getUncompressedSize() + " bytes");
+                        }
+
+                        // 懒解压：只提取目标文件
+                        zip4jFile.extractFile(fileHeader, tempDir.toString());
+
+                        // 构建返回路径
+                        Path extractedFile = tempDir.resolve(fileHeader.getFileName()).normalize();
+
+                        // 安全检查
+                        if (!extractedFile.startsWith(tempDir)) {
+                            throw new IOException("不安全的文件路径: " + fileHeader.getFileName());
+                        }
+
+                        if (!Files.exists(extractedFile)) {
+                            return ExtractResult.failure("解压失败，文件不存在: " + extractedFile);
+                        }
+
+                        String relativePath = fileUtils.getRelativePath(extractedFile);
+                        logger.info("✅ ZIP文件提取成功 - File: {}, Size: {} bytes",
+                                fileHeader.getFileName(), fileHeader.getUncompressedSize());
+
+                        return ExtractResult.success(relativePath, extractedFile.toString());
+                    }
+                } catch (IllegalArgumentException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
                 }
-
-                // 查找目标文件
-                net.lingala.zip4j.model.FileHeader fileHeader = zip4jFile.getFileHeader(targetFilePath);
-                if (fileHeader == null) {
-                    // 尝试替换路径分隔符
-                    String normalizedPath = targetFilePath.replace('\\', '/');
-                    fileHeader = zip4jFile.getFileHeader(normalizedPath);
-                }
-
-                // 如果找到了文件，进行解压
-                if (fileHeader != null) {
-                    logger.info("✅ 成功使用编码 {} 找到文件: {}", encoding, fileHeader.getFileName());
-
-                    if (fileHeader.isDirectory()) {
-                        return ExtractResult.failure("目标路径是目录，不是文件: " + targetFilePath);
-                    }
-
-                    // 检查文件大小
-                    if (fileHeader.getUncompressedSize() > maxFileSize) {
-                        return ExtractResult.failure("文件太大，超过限制: " + fileHeader.getUncompressedSize() + " bytes");
-                    }
-
-                    // 懒解压：只提取目标文件
-                    zip4jFile.extractFile(fileHeader, tempDir.toString());
-
-                    // 构建返回路径
-                    Path extractedFile = tempDir.resolve(fileHeader.getFileName()).normalize();
-
-                    // 安全检查
-                    if (!extractedFile.startsWith(tempDir)) {
-                        throw new IOException("不安全的文件路径: " + fileHeader.getFileName());
-                    }
-
-                    if (!Files.exists(extractedFile)) {
-                        return ExtractResult.failure("解压失败，文件不存在: " + extractedFile);
-                    }
-
-                    String relativePath = fileUtils.getRelativePath(extractedFile);
-                    logger.info("✅ ZIP文件提取成功 - File: {}, Size: {} bytes",
-                            fileHeader.getFileName(), fileHeader.getUncompressedSize());
-
-                    return ExtractResult.success(relativePath, extractedFile.toString());
-                }
-
                 // 当前编码找不到文件，尝试下一个编码
                 logger.debug("使用编码 {} 未找到文件，尝试下一个编码 - 目标文件: {}", encoding, targetFilePath);
 

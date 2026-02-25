@@ -129,7 +129,8 @@ class UniversalArchiveConvertStrategyTest {
     void testConvertUnsupportedFormat() throws IOException {
         // 创建一个文本文件而不是压缩文件
         File textFile = tempDir.resolve("test.txt").toFile();
-        textFile.createNewFile();
+        boolean fileCreated = textFile.createNewFile();
+        assertTrue(fileCreated, "测试文件应该成功创建");
         
         String outputDir = tempDir.toString();
         

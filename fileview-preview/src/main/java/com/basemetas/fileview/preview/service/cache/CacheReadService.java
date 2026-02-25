@@ -174,7 +174,6 @@ public class CacheReadService {
                 if (val != null) {
                     PreviewCacheInfo info = convertFromConvertResult(val);
                     if (info != null) {
-                        String hitFormat = commonFormats[i];
                         return info;
                     }
                 }
@@ -194,7 +193,6 @@ public class CacheReadService {
                     if (cacheData != null) {
                         PreviewCacheInfo previewInfo = convertFromConvertResult(cacheData);
                         if (previewInfo != null) {
-                            String format = key.substring(key.lastIndexOf(":") + 1);
                             return previewInfo;
                         }
                     }

@@ -36,6 +36,11 @@ public class TempFileCleanupService {
     
     private static final Logger logger = LoggerFactory.getLogger(TempFileCleanupService.class);
     
+    /**
+     * 每小时的毫秒数常量
+     */
+    private static final long MILLIS_PER_HOUR = 60L * 60 * 1000;
+    
     @Value("${libreoffice.temp.dir:}")
     private String tempDir;
     
@@ -67,7 +72,7 @@ public class TempFileCleanupService {
         
         int deletedCount = 0;
         int failedCount = 0;
-        long maxAgeMillis = maxAgeHours * 60 * 60 * 1000L;
+        long maxAgeMillis = maxAgeHours * MILLIS_PER_HOUR;
         long currentTime = System.currentTimeMillis();
         
         try {

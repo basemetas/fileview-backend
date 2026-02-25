@@ -317,7 +317,12 @@ public class OfdConvertStrategy implements FileConvertStrategy {
 
             // 确保目标目录存在
             File parentDir = targetFile.getParentFile();
-            if (parentDir != null && !parentDir.exists()) {
+            if (parentDir == null) {
+                logger.error("无法获取目标文件的父目录: {}", targetPath);
+                return false;
+            }
+            
+            if (!parentDir.exists()) {
                 if (!parentDir.mkdirs()) {
                     logger.error("无法创建目标目录: {}", parentDir.getAbsolutePath());
                     return false;
@@ -420,18 +425,22 @@ public class OfdConvertStrategy implements FileConvertStrategy {
 
 
     /**
-     * 获取或创建多页并行转换线程池
+     * 获取或创建多页并行转换线程池（线程安全的懒加载）
      */
     private ExecutorService getParallelConversionPool() {
         if (parallelConversionPool == null) {
             synchronized (poolLock) {
                 if (parallelConversionPool == null) {
-                    parallelConversionPool = Executors.newFixedThreadPool(maxParallelThreads, r -> {
+                    // 使用临时变量完成所有初始化，确保对象完全构造后再赋值给 volatile 字段
+                    ExecutorService tempPool = Executors.newFixedThreadPool(maxParallelThreads, r -> {
                         Thread t = new Thread(r, "ofd-parallel-conversion-" + System.currentTimeMillis());
                         t.setDaemon(true); // 设为守护线程，防止阻塞应用退出
                         return t;
                     });
                     logger.info("初始化OFD多页并行转换线程池，最大线程数: {}", maxParallelThreads);
+                    
+                    // 所有初始化完成后，再赋值给 volatile 字段（happens-before 保证）
+                    parallelConversionPool = tempPool;
                 }
             }
         }

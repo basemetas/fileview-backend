@@ -61,15 +61,12 @@ public class FontUtils {
             }
 
             // 2. 扫描字体目录文件（补充方式）
-            List<String> fontDirs = getFontDirectories(scanPaths);
-            int scannedFiles = 0;
-            
+            List<String> fontDirs = getFontDirectories(scanPaths);           
             for (String dir : fontDirs) {
                 File fontDir = new File(dir);
                 if (!fontDir.exists() || !fontDir.isDirectory()) {
                     continue;
                 }
-                scannedFiles += scanFontDirectory(fontDir, availableFonts, ge);
             }
 
         } catch (Exception e) {
@@ -122,8 +119,8 @@ public class FontUtils {
                 count += scanFontDirectory(file, availableFonts, ge);
             } else if (isFontFile(file)) {
                 // 尝试解析并注册字体文件（关键！）
-                try {
-                    Font font = Font.createFont(Font.TRUETYPE_FONT, new FileInputStream(file));
+                try (FileInputStream fis = new FileInputStream(file)) {
+                    Font font = Font.createFont(Font.TRUETYPE_FONT, fis);
                     if (font != null) {
                         // 注册字体到 GraphicsEnvironment
                         boolean registered = ge.registerFont(font);

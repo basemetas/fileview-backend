@@ -26,7 +26,7 @@
         <spring.boot.version>3.3.4</spring.boot.version>
         <spring.cloud.version>2023.0.3</spring.cloud.version>
         <rocketmq.version>2.3.0</rocketmq.version>
-        <bc.version>1.79</bc.version>
+        <bc.version>1.83</bc.version>
     </properties>
 
     <dependencyManagement>

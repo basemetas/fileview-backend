@@ -104,9 +104,6 @@ class OfdConvertStrategyTest {
     
     @Test
     void testServiceIntegration() {
-        // 测试服务集成，确保策略正确实现了接口
-        assertTrue(ofdConvertStrategy instanceof FileConvertStrategy);
-        
         // 测试默认转换方法
         String testFile = testTempDir + File.separator + "test.ofd";
         String targetPath = testTempDir + File.separator + "output";

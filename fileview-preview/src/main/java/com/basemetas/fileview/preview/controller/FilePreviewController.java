@@ -243,18 +243,18 @@ public class FilePreviewController {
         }
 
         try {
+            // 配置空指针检查（必须在使用前检查）
+            if (pollingConfig == null) {
+                logger.error("❌ pollingConfig未正确注入");
+                return ReturnResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.SYSTEM_ERROR);
+            }
+            
             // 使用配置的默认值
             if (timeout == null) {
                 timeout = pollingConfig.getDefaultTimeout();
             }
             if (interval == null) {
                 interval = pollingConfig.getDefaultInterval();
-            }
-
-            // 配置空指针检查
-            if (pollingConfig == null) {
-                logger.error("❌ pollingConfig未正确注入");
-                return ReturnResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.SYSTEM_ERROR);
             }
 
             // 参数验证和调整

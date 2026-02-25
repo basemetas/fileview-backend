@@ -191,14 +191,18 @@ public class ValidateAndNormalized {
     // ======================== 环境检测方法 ========================
 
     /**
-     * 获取环境信息（单例模式，线程安全）
+     * 获取环境信息（线程安全的懒加载）
      */
     public EnvironmentInfo getEnvironmentInfo() {
         if (environmentInfo == null) {
             synchronized (envLock) {
                 if (environmentInfo == null) {
-                    environmentInfo = new EnvironmentInfo();
-                    logger.info("环境信息初始化完成: {}", environmentInfo);
+                    // 使用临时变量完成所有初始化，确保对象完全构造后再赋值给 volatile 字段
+                    EnvironmentInfo tempInfo = new EnvironmentInfo();
+                    logger.info("环境信息初始化完成: {}", tempInfo);
+                    
+                    // 所有初始化完成后，再赋值给 volatile 字段（happens-before 保证）
+                    environmentInfo = tempInfo;
                 }
             }
         }

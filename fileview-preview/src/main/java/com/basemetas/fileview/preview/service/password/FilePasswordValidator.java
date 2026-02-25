@@ -208,13 +208,13 @@ public class FilePasswordValidator {
             case "doc":
             case "xls":
             case "ppt":
-            // WPS 格式（基于OLE2结构）
-            case "wps":  // WPS文字（类似DOC）
-            case "wpt":  // WPS模板
-            case "et":   // WPS表格（类似XLS）
-            case "ett":  // WPS表格模板
-            case "dps":  // WPS演示（类似PPT）
-            case "dpt":  // WPS演示模板
+                // WPS 格式（基于OLE2结构）
+            case "wps": // WPS文字（类似DOC）
+            case "wpt": // WPS模板
+            case "et": // WPS表格（类似XLS）
+            case "ett": // WPS表格模板
+            case "dps": // WPS演示（类似PPT）
+            case "dpt": // WPS演示模板
                 return validateOle2Password(file, password, format);
 
             // PDF 格式
@@ -259,37 +259,37 @@ public class FilePasswordValidator {
      */
     private PasswordValidationResult validateZipPassword(File archiveFile, String password, String format) {
         try {
-            ZipFile zipFile = new ZipFile(archiveFile);
+            try (ZipFile zipFile = new ZipFile(archiveFile)) {
+                // 检查是否加密
+                if (!zipFile.isEncrypted()) {
+                    logger.debug("ZIP文件未加密: {}", archiveFile.getName());
+                    return PasswordValidationResult.notEncrypted(format);
+                }
 
-            // 检查是否加密
-            if (!zipFile.isEncrypted()) {
-                logger.debug("ZIP文件未加密: {}", archiveFile.getName());
-                return PasswordValidationResult.notEncrypted(format);
-            }
+                // 已加密但未提供密码
+                if (password == null || password.trim().isEmpty()) {
+                    logger.debug("ZIP文件已加密但未提供密码: {}", archiveFile.getName());
+                    return PasswordValidationResult.passwordRequired(format);
+                }
 
-            // 已加密但未提供密码
-            if (password == null || password.trim().isEmpty()) {
-                logger.debug("ZIP文件已加密但未提供密码: {}", archiveFile.getName());
-                return PasswordValidationResult.passwordRequired(format);
-            }
+                // 设置密码并尝试读取第一个文件
+                zipFile.setPassword(password.toCharArray());
 
-            // 设置密码并尝试读取第一个文件
-            zipFile.setPassword(password.toCharArray());
-
-            // 获取第一个非目录条目进行验证
-            for (Object fhObj : zipFile.getFileHeaders()) {
-                net.lingala.zip4j.model.FileHeader fileHeader = (net.lingala.zip4j.model.FileHeader) fhObj;
-                if (!fileHeader.isDirectory()) {
-                    try (java.io.InputStream is = zipFile.getInputStream(fileHeader)) {
-                        // 尝试读取少量数据（1KB）以验证密码
-                        byte[] buffer = new byte[1024];
-                        int read = is.read(buffer);
-                        if (read > 0) {
-                            logger.debug("ZIP密码验证成功: {}", archiveFile.getName());
-                            return PasswordValidationResult.passwordCorrect(format);
+                // 获取第一个非目录条目进行验证
+                for (Object fhObj : zipFile.getFileHeaders()) {
+                    net.lingala.zip4j.model.FileHeader fileHeader = (net.lingala.zip4j.model.FileHeader) fhObj;
+                    if (!fileHeader.isDirectory()) {
+                        try (java.io.InputStream is = zipFile.getInputStream(fileHeader)) {
+                            // 尝试读取少量数据（1KB）以验证密码
+                            byte[] buffer = new byte[1024];
+                            int read = is.read(buffer);
+                            if (read > 0) {
+                                logger.debug("ZIP密码验证成功: {}", archiveFile.getName());
+                                return PasswordValidationResult.passwordCorrect(format);
+                            }
                         }
+                        break; // 只测试第一个文件
                     }
-                    break; // 只测试第一个文件
                 }
             }
 
@@ -442,7 +442,6 @@ public class FilePasswordValidator {
                         if (!Boolean.TRUE.equals(isFolder)) {
                             try {
                                 // 使用内存提取验证密码
-                                final byte[] buffer = new byte[1024];
                                 inArchive.extractSlow(i, new ISequentialOutStream() {
                                     private int totalRead = 0;
 
@@ -554,7 +553,7 @@ public class FilePasswordValidator {
         try (POIFSFileSystem fs = new POIFSFileSystem(
                 file, true)) {
 
-           DirectoryNode root = fs.getRoot();
+            DirectoryNode root = fs.getRoot();
 
             boolean hasEncryptionInfo = root.hasEntry("EncryptionInfo");
             boolean hasEncryptedPackage = root.hasEntry("EncryptedPackage");
@@ -580,14 +579,14 @@ public class FilePasswordValidator {
             // 🔑 POI 5.4.0 新增：ZIP 重复条目检测
             // 当文件包含重复路径的 ZIP 条目时，POI 会抛出 IllegalArgumentException
             String errorMsg = e.getMessage();
-            if (errorMsg != null && (errorMsg.toLowerCase().contains("duplicate") || 
-                                      errorMsg.toLowerCase().contains("duplicated"))) {
+            if (errorMsg != null && (errorMsg.toLowerCase().contains("duplicate") ||
+                    errorMsg.toLowerCase().contains("duplicated"))) {
                 logger.warn("⚠️ {}文件包含重复ZIP条目（可能是恶意文件）- 文件: {}, 错误: {}",
                         format.toUpperCase(), file.getName(), errorMsg);
                 return PasswordValidationResult.error(format, "文件格式异常：包含重复ZIP条目");
             }
             // 其他 IllegalArgumentException，继续抛出
-            logger.error("{}文件参数异常 - 文件: {}, 错误: {}", 
+            logger.error("{}文件参数异常 - 文件: {}, 错误: {}",
                     format.toUpperCase(), file.getName(), errorMsg, e);
             return PasswordValidationResult.error(format, "文件格式异常: " + errorMsg);
         } catch (IOException e) {
@@ -734,9 +733,9 @@ public class FilePasswordValidator {
     /**
      * 使用 ExtractorFactory 统一验证 OLE2 文件密码（DOC/XLS/PPT/WPS 通用）
      * 
-     * @param file 文件对象
+     * @param file     文件对象
      * @param password 密码（可为null）
-     * @param format 文件格式
+     * @param format   文件格式
      * @param fileType 文件类型描述（用于日志）
      * @return 密码验证结果
      */
@@ -1027,71 +1026,6 @@ public class FilePasswordValidator {
             logger.error("💥 外部7z命令执行异常 - File: {}", archiveFile.getName(), e);
             // 无法检测，保守起见假定未加密
             return PasswordValidationResult.notEncrypted(format);
-        }
-    }
-
-    /**
-     * 验证PDF格式密码 - 轻量级检测
-     * 
-     * 🚀 性能优化：使用PDFBox的isEncrypted()实现毫秒级检测
-     * 只读取PDF头部的trailer/Encrypt字典，不解压不解密
-     * 
-     * @param pdfFile  PDF文件
-     * @param password 密码（可为null）
-     * @param format   文件格式
-     * @return 验证结果
-     */
-    private PasswordValidationResult validatePdfPassword(File pdfFile, String password, String format) {
-        logger.debug("开始检测PDF文件加密状态 - 文件: {}, 大小: {} bytes",
-                pdfFile.getName(), pdfFile.length());
-
-        try {
-            // 🔑 第一阶段：轻量级检测是否加密（不解密）
-            try (org.apache.pdfbox.pdmodel.PDDocument doc = org.apache.pdfbox.pdmodel.PDDocument.load(pdfFile)) {
-
-                if (!doc.isEncrypted()) {
-                    logger.debug("🔓 PDF文件未加密 - 文件: {}", pdfFile.getName());
-                    return PasswordValidationResult.notEncrypted(format);
-                }
-
-                // 文件加密但无用户密码（只有owner password）
-                // PDFBox会自动用空密码尝试打开
-                logger.debug("🔐 PDF文件加密但可读取（可能只有owner password） - 文件: {}", pdfFile.getName());
-                return PasswordValidationResult.notEncrypted(format);
-            }
-
-        } catch (org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException e) {
-            // 需要用户密码
-            logger.info("🔒 PDF文件需要密码 - 文件: {}", pdfFile.getName());
-
-            if (password == null || password.trim().isEmpty()) {
-                return PasswordValidationResult.passwordRequired(format);
-            }
-
-            // 🔑 第二阶段：验证密码
-            return verifyPdfPassword(pdfFile, password, format);
-
-        } catch (IOException e) {
-            logger.error("❌ PDF文件读取失败 - 文件: {}, 错误: {}", pdfFile.getName(), e.getMessage());
-            return PasswordValidationResult.error(format, "PDF文件读取失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 验证PDF密码
-     */
-    private PasswordValidationResult verifyPdfPassword(File pdfFile, String password, String format) {
-        try (org.apache.pdfbox.pdmodel.PDDocument doc = org.apache.pdfbox.pdmodel.PDDocument.load(pdfFile, password)) {
-
-            logger.info("✅ PDF密码验证成功 - 文件: {}", pdfFile.getName());
-            return PasswordValidationResult.passwordCorrect(format);
-
-        } catch (org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException e) {
-            logger.warn("❌ PDF密码错误 - 文件: {}", pdfFile.getName());
-            return PasswordValidationResult.passwordIncorrect(format, "密码错误");
-        } catch (IOException e) {
-            logger.error("❌ PDF密码验证失败 - 文件: {}, 错误: {}", pdfFile.getName(), e.getMessage());
-            return PasswordValidationResult.error(format, "PDF密码验证失败");
         }
     }
 

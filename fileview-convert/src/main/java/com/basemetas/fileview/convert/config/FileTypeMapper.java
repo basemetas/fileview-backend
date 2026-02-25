@@ -67,30 +67,7 @@ public class FileTypeMapper {
      */
     @PostConstruct
     public void postInit() {
-        // logger.info("========== 文件类型映射器初始化完成 ==========");
-        // logger.info("支持的文件类别总数: {}", categoryToExtensionsMap.size());
-        // logger.info("支持的扩展名总数: {}", extensionToCategoryMap.size());
-        
-        // // 输出每个类别的格式能力
-        // for (FileCategory category : FileCategory.values()) {
-        //     Set<String> extensions = categoryToExtensionsMap.get(category);
-        //     Set<String> sourceFormats = supportedSourceFormatsMap.get(category);
-        //     Set<String> targetFormats = supportedTargetFormatsMap.get(category);
-            
-        //     if (extensions != null && !extensions.isEmpty()) {
-        //         logger.info("[{}] 扩展名({})种: {}", 
-        //             category.getDescription(), extensions.size(), extensions);
-        //     }
-        //     if (sourceFormats != null && !sourceFormats.isEmpty()) {
-        //         logger.info("[{}] 支持源格式({})种: {}", 
-        //             category.getDescription(), sourceFormats.size(), sourceFormats);
-        //     }
-        //     if (targetFormats != null && !targetFormats.isEmpty()) {
-        //         logger.info("[{}] 支持目标格式({})种: {}", 
-        //             category.getDescription(), targetFormats.size(), targetFormats);
-        //     }
-        // }
-        // logger.info("=============================================");
+      
     }
     
     /**
@@ -655,7 +632,11 @@ public class FileTypeMapper {
     }
     
     /**
-     * 格式能力包装类
+     * 格式能力封装类
+     * 
+     * 注意：本类使用不可变集合保护内部状态
+     * - sourceFormats 和 targetFormats 在构造时被包装为 Collections.unmodifiableSet()
+     * - getter 返回的是不可变视图，外部无法修改
      */
     public static class FormatCapability {
         private final Set<String> sourceFormats;
@@ -666,10 +647,18 @@ public class FileTypeMapper {
             this.targetFormats = Collections.unmodifiableSet(targetFormats);
         }
         
+        /**
+         * 获取支持的源格式集合
+         * @return 不可变的源格式集合（通过 Collections.unmodifiableSet 保护）
+         */
         public Set<String> getSourceFormats() {
             return sourceFormats;
         }
         
+        /**
+         * 获取支持的目标格式集合
+         * @return 不可变的目标格式集合（通过 Collections.unmodifiableSet 保护）
+         */
         public Set<String> getTargetFormats() {
             return targetFormats;
         }

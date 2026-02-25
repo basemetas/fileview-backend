@@ -17,6 +17,8 @@ package com.basemetas.fileview.preview.model.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -329,12 +331,44 @@ public class FilePreviewRequest {
         this.preferredFormat = preferredFormat;
     }
     
+    /**
+     * 获取扩展参数（防御性拷贝）
+     * @return 扩展参数的不可变副本，如果为null则返回null
+     */
     public Map<String, Object> getExtendedParams() {
-        return extendedParams;
+        return extendedParams == null ? null : Collections.unmodifiableMap(extendedParams);
     }
     
+    /**
+     * 设置扩展参数（防御性拷贝）
+     * @param extendedParams 扩展参数，将创建副本以防止外部修改
+     */
     public void setExtendedParams(Map<String, Object> extendedParams) {
-        this.extendedParams = extendedParams;
+        this.extendedParams = extendedParams == null ? null : new HashMap<>(extendedParams);
+    }
+
+    /**
+     * 添加单个扩展参数（安全方法）
+     * <p>
+     * 此方法会：
+     * 1. 创建新的可修改 Map
+     * 2. 复制现有扩展参数（如果存在）
+     * 3. 添加新参数
+     * 4. 通过 setter 设置回去
+     * <p>
+     * 这样可以避免直接修改 getExtendedParams() 返回的不可变 Map。
+     * 
+     * @param key 参数键
+     * @param value 参数值
+     */
+    public void addExtendedParam(String key, Object value) {
+        Map<String, Object> current = this.extendedParams;
+        Map<String, Object> newParams = new HashMap<>();
+        if (current != null) {
+            newParams.putAll(current);
+        }
+        newParams.put(key, value);
+        this.extendedParams = newParams;
     }
 
 
