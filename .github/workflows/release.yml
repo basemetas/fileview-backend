@@ -47,26 +47,30 @@ jobs:
         run: |
           RAW_TAG=${GITHUB_REF#refs/tags/}
           TAG=${RAW_TAG#v}
+          # 提取基础版本号（去掉 -rc1 这样的后缀）
+          BASE_VERSION=$(echo "$TAG" | sed 's/-[a-zA-Z0-9]*$//')
           echo "raw_tag=$RAW_TAG" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "full_version=$TAG" >> $GITHUB_OUTPUT
 
       # -------------------------
-      # 校验 tag 格式 vX.Y.Z
+      # 校验 tag 格式 vX.Y.Z 或 vX.Y.Z-xxx
       # -------------------------
       - name: Validate tag format
         run: |
-          if [[ ! "${{ steps.tag.outputs.raw_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid tag format. Use vX.Y.Z"
+          if [[ ! "${{ steps.tag.outputs.raw_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "❌ Invalid tag format. Use vX.Y.Z or vX.Y.Z-suffix (e.g., vX.Y.Z-rc1)"
             exit 1
           fi
 
       # -------------------------
-      # 校验 version.txt 与 tag 一致
+      # 校验 version.txt 与 tag 基础版本一致
       # -------------------------
       - name: Validate version match
         run: |
-          if [ "${{ steps.file.outputs.version }}" != "${{ steps.tag.outputs.tag }}" ]; then
-            echo "❌ Tag version does not match version.txt"
+          if [ "${{ steps.file.outputs.version }}" != "${{ steps.tag.outputs.base_version }}" ]; then
+            echo "❌ Tag version does not match version.txt (expected: ${{ steps.tag.outputs.base_version }}, got: ${{ steps.file.outputs.version }})"
             exit 1
           fi
           echo "✅ Version matched"
@@ -92,7 +96,7 @@ jobs:
       - name: Zip release folder
         run: |
           cd .release/opt
-          zip -r fileview-backend-v${{ steps.file.outputs.version }}.zip fileview
+          zip -r fileview-backend-v${{ steps.tag.outputs.full_version }}.zip fileview
 
       # -------------------------
       # 生成 SHA256
@@ -100,8 +104,8 @@ jobs:
       - name: Generate SHA256
         run: |
           cd .release/opt
-          sha256sum fileview-backend-v${{ steps.file.outputs.version }}.zip \
-            > fileview-backend-v${{ steps.file.outputs.version }}.zip.sha256
+          sha256sum fileview-backend-v${{ steps.tag.outputs.full_version }}.zip \
+            > fileview-backend-v${{ steps.tag.outputs.full_version }}.zip.sha256
 
       # -------------------------
       # 生成 CHANGELOG
@@ -125,11 +129,11 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.file.outputs.version }}
-          name: v${{ steps.file.outputs.version }}
+          tag_name: v${{ steps.tag.outputs.full_version }}
+          name: v${{ steps.tag.outputs.full_version }}
           body_path: CHANGELOG.md
           files: |
-            .release/opt/fileview-backend-v${{ steps.file.outputs.version }}.zip
-            .release/opt/fileview-backend-v${{ steps.file.outputs.version }}.zip.sha256
+            .release/opt/fileview-backend-v${{ steps.tag.outputs.full_version }}.zip
+            .release/opt/fileview-backend-v${{ steps.tag.outputs.full_version }}.zip.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
