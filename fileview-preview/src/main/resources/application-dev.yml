@@ -115,12 +115,7 @@ fileview:
       upload-dir: /opt/fileview/data/uploads
       download-dir: /opt/fileview/data/downloads
       uncompress-dir: /opt/fileview/data/uncompress
-      max-file-size-mb: 100
-    
-    convert-service:
-      url: http://127.0.0.1:8183
-      timeout: 120000
-      retry-count: 3
+      max-file-size-mb: 100   
     
     security:
       password:
