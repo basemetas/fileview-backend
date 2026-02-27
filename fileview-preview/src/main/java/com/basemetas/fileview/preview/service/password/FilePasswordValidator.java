@@ -40,6 +40,7 @@ import org.apache.poi.poifs.crypt.EncryptionInfo;
 import org.apache.poi.poifs.filesystem.DirectoryNode;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
+import org.apache.poi.poifs.filesystem.OfficeXmlFileException;
 
 /**
  * 文件密码验证服务
@@ -631,6 +632,12 @@ public class FilePasswordValidator {
 
             return validateOle2PasswordInternal(file, password, format, fs);
 
+        } catch (org.apache.poi.poifs.filesystem.OfficeXmlFileException e) {
+            // 🔄 文件实际为 OOXML 格式（扩展名与内容不符），自动切换到 OOXML 验证
+            logger.info("⚠️ 文件扩展名为 .{} 但实际为 OOXML 格式，自动切换验证逻辑 - 文件: {}",
+                    format, file.getName());
+            return validateOoxmlPassword(file, password, format);
+            
         } catch (IOException e) {
             // 🚨 POIFSFileSystem构造失败，说明不是OLE2格式或文件损坏
             logger.warn("{}文件不是OLE2格式或文件损坏 - 文件: {}, 错误: {}",
@@ -638,7 +645,8 @@ public class FilePasswordValidator {
             return PasswordValidationResult.error(format,
                     "文件格式不正确或损坏: " + e.getMessage());
         } catch (Exception e) {
-            logger.error("{}文件密码验证异常 - 文件: {}", format.toUpperCase(), file.getName(), e);
+            logger.warn("{}文件密码验证异常 - 文件: {}, 错误: {}", 
+                    format.toUpperCase(), file.getName(), e.getMessage());
             return PasswordValidationResult.error(format, "密码验证失败: " + e.getMessage());
         }
     }

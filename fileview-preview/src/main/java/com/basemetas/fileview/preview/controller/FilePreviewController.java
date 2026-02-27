@@ -32,6 +32,8 @@ import com.basemetas.fileview.preview.service.url.RequestAwareBaseUrlProvider;
 import com.basemetas.fileview.preview.utils.EncodingUtils;
 import com.basemetas.fileview.preview.utils.HttpUtils;
 import com.basemetas.fileview.preview.model.PreviewCacheInfo;
+import com.basemetas.fileview.preview.model.PreviewStatusContext;
+import com.basemetas.fileview.preview.model.PreviewStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +46,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -139,7 +142,8 @@ public class FilePreviewController {
      * @return 统一响应格式
      */
     @PostMapping("/localFile")
-    public ResponseEntity<Map<String, Object>> processPreviewRequest(@RequestBody FilePreviewRequest request,
+    public ResponseEntity<Map<String, Object>> processPreviewRequest(
+            @Valid @RequestBody FilePreviewRequest request,
             HttpServletRequest httpRequest) {
         logger.info("📋 收到文件预览请求 - FileId: {}, Type: {}", request.getFileId(), request.getPreviewType());
         long startTime = System.currentTimeMillis();
@@ -178,7 +182,8 @@ public class FilePreviewController {
      * @return 统一响应格式
      */
     @PostMapping("/netFile")
-    public ResponseEntity<Map<String, Object>> previewServerFile(@RequestBody FilePreviewRequest request,
+    public ResponseEntity<Map<String, Object>> previewServerFile(
+            @Valid @RequestBody FilePreviewRequest request,
             HttpServletRequest httpRequest) {
         logger.info("📋 收到文件预览请求 - FileId: {}, httpUrl: {}", request.getFileId(), request.getNetworkFileUrl());
         long startTime = System.currentTimeMillis();
@@ -217,7 +222,7 @@ public class FilePreviewController {
      */
     @PostMapping("/status/poll")
     public ResponseEntity<Map<String, Object>> pollPreviewStatus(
-            @RequestBody PollingRequest request, HttpServletRequest httpRequest) {
+            @Valid @RequestBody PollingRequest request, HttpServletRequest httpRequest) {
         long startTime = System.currentTimeMillis();
 
         // 🔑 关键修复：提取 clientId
@@ -264,6 +269,13 @@ public class FilePreviewController {
             
             // 🔑 关键修复：在进入异步线程前提取 requestBaseUrl
             String requestBaseUrl = baseUrlProvider.getBaseUrl();
+            
+            // 🔍 预检查：如果缓存中已是终态，直接返回，避免进入长轮询
+            ResponseEntity<Map<String, Object>> preCheckResult = 
+                    preCheckAndReturnIfTerminal(fileId, targetFormat, clientId, requestBaseUrl, startTime, httpRequest);
+            if (preCheckResult != null) {
+                return preCheckResult;
+            }
             
             logger.info("🔄 开始长轮询 - FileId: {}, TargetFormat: {}, Timeout: {}s, Interval: {}ms",
                     fileId, (targetFormat != null ? targetFormat : "按优先级"), timeout, interval);
@@ -361,262 +373,138 @@ public class FilePreviewController {
         );
     }
     /**
-     * 执行长轮询逻辑（增强版 - 包含下载状态）
+     * 执行长轮询逻辑（重构版 - 状态枚举策略）
+     * 
+     * @param fileId 文件ID
+     * @param targetFormat 目标格式
+     * @param timeoutSeconds 超时时间（秒）
+     * @param intervalMs 轮询间隔（毫秒）
+     * @param startTime 开始时间
+     * @param clientId 客户端ID
+     * @param requestBaseUrl 请求基础URL
+     * @return 轮询结果响应
      */
-    private Map<String, Object> performLongPollingWithDownloadStatus(String fileId, String targetFormat,
-            int timeoutSeconds,
-            int intervalMs, long startTime, String clientId, String requestBaseUrl) {  // 🔑 新增 requestBaseUrl 参数
+    private Map<String, Object> performLongPollingWithDownloadStatus(
+            String fileId, String targetFormat, int timeoutSeconds, int intervalMs,
+            long startTime, String clientId, String requestBaseUrl) {
+        
         int maxAttempts = (timeoutSeconds * 1000) / intervalMs;
-        int attemptCount = 0;
-
-        while (attemptCount < maxAttempts) {
+        long firstCheckTime = System.currentTimeMillis();
+        boolean fileIdEverExistedInCache = false;
+        
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
             try {
-                // 首先检查下载任务状态
-                Map<String, Object> downloadCheckResult = checkDownloadTaskStatus(fileId, startTime);
-                if (downloadCheckResult != null) {
-                    // 下载失败，直接返回
-                    return downloadCheckResult;
+                // ==================== 1. 下载状态检查 ====================
+                Map<String, Object> downloadResult = checkDownloadTaskStatus(fileId, startTime);
+                if (downloadResult != null) {
+                    return downloadResult;
                 }
-
-                // 检查是否有缓存结果（转换状态）
-                if (cacheReadService == null) {
-                    logger.error("❌ cacheReadService未正确注入 - FileId: {}", fileId);
-                    throw new RuntimeException("缓存策略未初始化");
-                }
-
-                PreviewCacheInfo cacheInfo;
-                if (targetFormat != null && !targetFormat.trim().isEmpty()) {
-                    // 精确查询
-                    cacheInfo = cacheReadService.getCachedResult(fileId, targetFormat);
-                    logger.debug("🔍 精确查询 - FileId: {}, TargetFormat: {}", fileId, targetFormat);
-                } else {
-                    // 按优先级查询
-                    cacheInfo = cacheReadService.getCachedResult(fileId);
-                    logger.debug("🔍 按优先级查询 - FileId: {}", fileId);
-                }
-
-                // 添加详细调试日志
-                if (cacheInfo != null) {
-                    String status = cacheInfo.getStatus();
-                    if (status == null) {
-                        status = "UNKNOWN";
-                    }             
-                    // 检查转换状态
-                    String previewUrl = cacheInfo.getPreviewUrl();
-                    if ("SUCCESS".equals(status) && previewUrl != null && !previewUrl.isEmpty()) {
-                        // 🔑 关键修复：对于加密文件，检查 clientId 的解锁状态
-                        if (previewService.isEncryptedArchive(cacheInfo)) {
-                            if (clientId == null || clientId.trim().isEmpty()) {
-                                logger.warn("⚠️ 加密文件SUCCESS状态，但未提供 clientId - FileId: {}", fileId);
-                                // 返回 PASSWORD_REQUIRED
-                                Map<String, Object> passwordRequiredResponse = buildFailureResponseFromCache(
-                                    fileId,
-                                    "PASSWORD_REQUIRED",
-                                    "压缩包已加密，需要密码",
-                                    ErrorCode.DOCUMENT_PASSWORD_REQUIRED,
-                                    cacheInfo,
-                                    null,
-                                    startTime
-                                );
-                                return passwordRequiredResponse;
-                            }
-                            // 🔑 关键修复：密码解锁使用 localFileId（基于本地文件路径生成），需同时检查
-                            String localFilePath = cacheInfo.getOriginalFilePath();
-                            String localFileId = (localFilePath != null && !localFilePath.trim().isEmpty()) 
-                                    ? fileUtils.generateFileIdFromFileUrl(localFilePath) : fileId;
-                            boolean isUnlocked = passwordUnlockService.isUnlocked(fileId, clientId) 
-                                    || passwordUnlockService.isUnlocked(localFileId, clientId);
-                            if (!isUnlocked) {
-                                logger.warn("🔒 加密文件SUCCESS状态，但 clientId 未解锁 - FileId: {}, LocalFileId: {}, ClientId: {}", fileId, localFileId, clientId);
-                                // 返回 PASSWORD_REQUIRED
-                                Map<String, Object> passwordRequiredResponse = buildFailureResponseFromCache(
-                                    fileId,
-                                    "PASSWORD_REQUIRED",
-                                    "文件已加密，需要密码",
-                                    ErrorCode.DOCUMENT_PASSWORD_REQUIRED,
-                                    cacheInfo,
-                                    null,
-                                    startTime
-                                );
-                                return passwordRequiredResponse;
-                            }
-                            logger.info("✅ 加密文件SUCCESS状态， clientId 已解锁 - FileId: {}, LocalFileId: {}, ClientId: {}", fileId, localFileId, clientId);
-                        }
-                        
-                        // 转换成功，构建成功响应
-                        Long remainingTtl;
-                        if (targetFormat != null && !targetFormat.trim().isEmpty()) {
-                            remainingTtl = cacheReadService.getCacheTTL(fileId, targetFormat);
-                        } else {
-                            remainingTtl = cacheReadService.getCacheTTL(fileId);
-                        }
-
-                        Map<String, Object> response = previewResponseAssembler.buildSuccessFromCache(
+                
+                // ==================== 2. 查询缓存信息 ====================
+                PreviewCacheInfo cacheInfo = queryCacheInfo(fileId, targetFormat);
+                if (cacheInfo == null) {
+                    long elapsedSinceFirstCheck = System.currentTimeMillis() - firstCheckTime;
+                    if (!fileIdEverExistedInCache && elapsedSinceFirstCheck > 3000) {
+                        logger.warn("⚠️ 长轮询宽限期内未发现缓存记录，视为文件ID不存在或已过期 - FileId: {}, Elapsed: {}ms",
+                                fileId, elapsedSinceFirstCheck);
+                        Map<String, Object> notFoundResponse = buildPollingResponse(
                                 fileId,
-                                cacheInfo,
-                                remainingTtl,
-                                startTime,
-                                requestBaseUrl,  // 🔑 使用传递的 requestBaseUrl
-                                urlExpirationHours,
-                                fileTypeMapper
+                                "NOT_FOUND",
+                                "文件ID不存在或已过期，请重新提交预览请求",
+                                startTime
                         );
-
-                        logger.info("🎯 长轮询命中SUCCESS结果 - FileId: {}, Attempt: {}/{}, Duration: {}ms",
-                                fileId, attemptCount + 1, maxAttempts, response.get("processingDuration"));
-
+                        notFoundResponse.put("errorCode", ErrorCode.FILE_NOT_FOUND.getCode());
+                        return notFoundResponse;
+                    }
+                    // 缓存不存在且仍在宽限期内，继续轮询
+                    Thread.sleep(calculateAdaptiveInterval(attempt, intervalMs));
+                    continue;
+                }
+                
+                fileIdEverExistedInCache = true;
+                
+                // ==================== 3. 构建状态上下文 ====================
+                PreviewStatusContext context = PreviewStatusContext.builder()
+                        .fileId(fileId)
+                        .targetFormat(targetFormat)
+                        .cacheInfo(cacheInfo)
+                        .clientId(clientId)
+                        .requestBaseUrl(requestBaseUrl)
+                        .startTime(startTime)
+                        .build();
+                
+                // ==================== 4. 提取状态并处理 ====================
+                String statusStr = cacheInfo.getStatus();
+                PreviewStatus status = PreviewStatus.fromString(statusStr);
+                
+                logger.debug("🔍 状态检查 - FileId: {}, Status: {}, Attempt: {}/{}", 
+                        fileId, status.getStatusName(), attempt + 1, maxAttempts);
+                
+                // 处理状态
+                Map<String, Object> response = status.handle(
+                        context,
+                        previewResponseAssembler,
+                        passwordUnlockService,
+                        previewService,
+                        fileTypeMapper,
+                        fileUtils,
+                        cacheReadService,
+                        urlExpirationHours
+                );
+                
+                // 检查是否为终态
+                if (response != null || status.isTerminal(context, passwordUnlockService, fileUtils)) {
+                    if (response != null) {
+                        logger.info("🎯 长轮询命中终态结果 - FileId: {}, Status: {}, Attempt: {}/{}", 
+                                fileId, status.getStatusName(), attempt + 1, maxAttempts);
                         return response;
-
-                    } else if ("FAILED".equals(status)) {
-                        // 转换失败，返回失败状态
-                        // 🔑 关键修复：读取 errorCode 并生成友好提示
-                        String cachedErrorCode = cacheInfo.getErrorCode();
-                        String errorMessage = "文件转换失败，请检查文件格式或重新上传";
-                        ErrorCode responseErrorCode = ErrorCode.CONVERSION_FAILED;
-                        
-                        // 根据 errorCode 生成友好提示
-                        if (String.valueOf(ErrorCode.UNSUPPORTED_CONVERSION.getCode()).equals(cachedErrorCode)) {
-                            String originalFormat = cacheInfo.getOriginalFileFormat();
-                            if (originalFormat != null && !originalFormat.isEmpty()) {
-                                errorMessage = String.format(
-                                    "不支持带密码的旧格式 %s",
-                                    originalFormat.toUpperCase()
-                                );
-                            } else {
-                                errorMessage = "不支持带密码的旧格式文档";
-                            }
-                            // 使用 UNSUPPORTED_CONVERSION 错误码保持一致
-                            responseErrorCode = ErrorCode.UNSUPPORTED_CONVERSION;
-                            logger.info("💡 转换引擎不支持 - FileId: {}, Format: {}, Message: {}",
-                                    fileId, originalFormat, errorMessage);
-                        }
-                        
-                        logger.warn("❌ 转换失败 - FileId: {}, Status: {}, ErrorCode: {}, OriginalFormat: {}", 
-                            fileId, status, cachedErrorCode, cacheInfo.getOriginalFileFormat());
-
-                        Map<String, Object> failedResponse = previewResponseAssembler.buildFailureFromCache(
-                            fileId, 
-                            "FAILED", 
-                            errorMessage,
-                            responseErrorCode,
-                            cacheInfo,
-                            targetFormat,
-                            startTime,
-                            urlExpirationHours,
-                            fileTypeMapper
-                        );
-
-                        return failedResponse;
-
-                    } else if ("NOT_SUPPORTED".equals(status)) {
-                        // 不支持的文件类型
-                        logger.warn("❌ 不支持的文件类型 - FileId: {}, Status: {}", fileId, status);
-
-                        String errorMsg = "不支持的文件类型: "
-                                + (cacheInfo.getOriginalFileFormat() != null ? cacheInfo.getOriginalFileFormat()
-                                        : "unknown");
-                        Map<String, Object> notSupportedResponse = previewResponseAssembler.buildFailureFromCache(
-                            fileId,
-                            "NOT_SUPPORTED",
-                            errorMsg,
-                            ErrorCode.UNSUPPORTED_FILE_TYPE,
-                            cacheInfo,
-                            null,
-                            startTime,
-                            urlExpirationHours,
-                            fileTypeMapper
-                        );
-
-                        return notSupportedResponse;
-                        
-                    } else if ("PASSWORD_REQUIRED".equals(status)) {
-                        // 需要密码，停止轮询
-                        logger.warn("🔑 文件需要密码 - FileId: {}, Status: {}", fileId, status);
-
-                        Map<String, Object> passwordRequiredResponse = previewResponseAssembler.buildFailureFromCache(
-                            fileId,
-                            "PASSWORD_REQUIRED",
-                            "文件已加密，需要密码",
-                            ErrorCode.DOCUMENT_PASSWORD_REQUIRED,
-                            cacheInfo,
-                            null,
-                            startTime,
-                            urlExpirationHours,
-                            fileTypeMapper
-                        );
-
-                        return passwordRequiredResponse;
-                        
-                    } else if ("PASSWORD_INCORRECT".equals(status)) {
-                        // 🔑 密码错误状态，需要先检查 clientId 是否已解锁
-                        // 🔑 关键修复：密码解锁使用 localFileId（基于本地文件路径生成），需同时检查
-                        String localFilePath = cacheInfo.getOriginalFilePath();
-                        String localFileId = (localFilePath != null && !localFilePath.trim().isEmpty()) 
-                                ? fileUtils.generateFileIdFromFileUrl(localFilePath) : fileId;
-                        boolean isUnlocked = (clientId != null && !clientId.trim().isEmpty()) 
-                                && (passwordUnlockService.isUnlocked(fileId, clientId) 
-                                    || passwordUnlockService.isUnlocked(localFileId, clientId));
-                        if (isUnlocked) {
-                            logger.info("✅ PASSWORD_INCORRECT缓存，但 clientId 已解锁，继续等待转换 - FileId: {}, LocalFileId: {}, ClientId: {}", fileId, localFileId, clientId);
-                            // clientId 已解锁，说明密码已正确，等待转换完成
-                            // 继续轮询
-                        } else {
-                            // 密码错误且未解锁，停止轮询
-                            logger.warn("❌ 文件密码错误 - FileId: {}, Status: {}", fileId, status);
-
-                            Map<String, Object> passwordIncorrectResponse = previewResponseAssembler.buildFailureFromCache(
-                                fileId,
-                                "PASSWORD_INCORRECT",
-                                "文件密码错误，请重试",
-                                ErrorCode.DOCUMENT_PASSWORD_INCORRECT,
-                                cacheInfo,
-                                null,
-                                startTime,
-                                urlExpirationHours,
-                                fileTypeMapper
-                            );
-
-                            return passwordIncorrectResponse;
-                        }
-                    } else {
-                        // 仍在转换中（IN_PROGRESS或其他状态）
-                        logger.debug("⏳ 转换仍在进行 - FileId: {}, Status: {}, Attempt: {}",
-                                fileId, status, attemptCount + 1);
-                        // 继续轮询
                     }
                 }
-
-                // 使用智能间隔：随着时间增加，逐渐增大检查间隔
-                int adaptiveInterval = calculateAdaptiveInterval(attemptCount, intervalMs);
-
-                Thread.sleep(adaptiveInterval);
-                attemptCount++;
-
-                // 每10次尝试记录一次日志
-                if (attemptCount % 10 == 0) {
+                
+                // ==================== 5. 非终态，继续轮询 ====================
+                Thread.sleep(calculateAdaptiveInterval(attempt, intervalMs));
+                
+                // 每10次记录日志
+                if ((attempt + 1) % 10 == 0) {
                     long elapsed = System.currentTimeMillis() - startTime;
                     logger.debug("⏳ 长轮询进行中 - FileId: {}, Attempt: {}/{}, Elapsed: {}ms",
-                            fileId, attemptCount, maxAttempts, elapsed);
+                            fileId, attempt + 1, maxAttempts, elapsed);
                 }
-
+                
             } catch (InterruptedException e) {
                 logger.warn("🛑 长轮询被中断 - FileId: {}", fileId);
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                logger.error("💥  长轮询检查异常 - FileId: {}, Attempt: {}", fileId, attemptCount, e);
-                // 发生异常时短暂等待后继续
+                logger.error("💥 长轮询检查异常 - FileId: {}, Attempt: {}", fileId, attempt, e);
                 try {
                     Thread.sleep(intervalMs);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     break;
                 }
-                attemptCount++;
             }
         }
-        // 超时未找到结果
-        logger.info("⏰ 长轮询超时未找到结果 - FileId: {}, Attempts: {}", fileId, attemptCount);
-        return previewResponseAssembler.buildConvertingResponse(fileId, "文件正在处理中，请稍候...", startTime, urlExpirationHours);
+        
+        // ==================== 6. 超时，返回 CONVERTING ====================
+        logger.info("⏰ 长轮询超时 - FileId: {}, Attempts: {}", fileId, maxAttempts);
+        return previewResponseAssembler.buildConvertingResponse(
+                fileId, "文件正在处理中，请稍候...", startTime, urlExpirationHours);
+    }
+
+    /**
+     * 查询缓存信息（辅助方法）
+     * 
+     * @param fileId 文件ID
+     * @param targetFormat 目标格式
+     * @return 缓存信息，不存在返回 null
+     */
+    private PreviewCacheInfo queryCacheInfo(String fileId, String targetFormat) {
+        if (targetFormat != null && !targetFormat.trim().isEmpty()) {
+            return cacheReadService.getCachedResult(fileId, targetFormat);
+        } else {
+            return cacheReadService.getCachedResult(fileId);
+        }
     }
 
     /**
@@ -664,6 +552,63 @@ public class FilePreviewController {
         }
         
         // 其他状态，继续轮询
+        return null;
+    }
+
+    /**
+     * 预检查：如果缓存中已是终态，直接返回完整响应
+     * 
+     * @param fileId 文件ID
+     * @param targetFormat 目标格式
+     * @param clientId 客户端ID
+     * @param requestBaseUrl 请求基础URL
+     * @param startTime 开始时间
+     * @param httpRequest HTTP请求对象
+     * @return 如果命中终态返回完整响应，否则返回null
+     */
+    private ResponseEntity<Map<String, Object>> preCheckAndReturnIfTerminal(
+            String fileId,
+            String targetFormat,
+            String clientId,
+            String requestBaseUrl,
+            long startTime,
+            HttpServletRequest httpRequest) {
+        
+        PreviewCacheInfo preCheckCache = queryCacheInfo(fileId, targetFormat);
+        if (preCheckCache == null) {
+            return null;
+        }
+        
+        PreviewStatusContext preCheckContext = PreviewStatusContext.builder()
+                .fileId(fileId)
+                .targetFormat(targetFormat)
+                .cacheInfo(preCheckCache)
+                .clientId(clientId)
+                .requestBaseUrl(requestBaseUrl)
+                .startTime(startTime)
+                .build();
+        
+        PreviewStatus preCheckStatus = PreviewStatus.fromString(preCheckCache.getStatus());
+        Map<String, Object> preCheckResponse = preCheckStatus.handle(
+                preCheckContext,
+                previewResponseAssembler,
+                passwordUnlockService,
+                previewService,
+                fileTypeMapper,
+                fileUtils,
+                cacheReadService,
+                urlExpirationHours
+        );
+        
+        if (preCheckResponse != null) {
+            long duration = System.currentTimeMillis() - startTime;
+            preCheckResponse.put("processingDuration", duration);
+            preCheckResponse.put("requestPath", httpRequest.getRequestURI());
+            logger.info("✅ 长轮询预检查命中终态结果 - FileId: {}, Status: {}, Duration: {}ms", 
+                    fileId, preCheckResponse.get("status"), duration);
+            return ReturnResponse.success(preCheckResponse, "长轮询完成");
+        }
+        
         return null;
     }
 

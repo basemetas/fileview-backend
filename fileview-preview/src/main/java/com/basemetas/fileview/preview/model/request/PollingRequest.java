@@ -15,10 +15,20 @@
  */
 package com.basemetas.fileview.preview.model.request;
 
+import com.basemetas.fileview.preview.common.validation.NoPathTraversal;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 /**
  * 长轮询请求参数
  */
 public class PollingRequest {
+
+    @NotBlank(message = "fileId不能为空")
+    @Size(max = 128, message = "fileId长度不能超过128")
+    @Pattern(regexp = "^[a-zA-Z0-9_.-]+$", message = "fileId只能包含字母、数字、下划线、中划线和点")
+    @NoPathTraversal(message = "fileId不能包含路径遍历相关字符")
     private String fileId;
     private String targetFormat;
     private Integer timeout;

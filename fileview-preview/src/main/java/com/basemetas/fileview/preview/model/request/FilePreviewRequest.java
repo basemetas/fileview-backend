@@ -15,7 +15,11 @@
  */
 package com.basemetas.fileview.preview.model.request;
 
+import com.basemetas.fileview.preview.common.validation.NoPathTraversal;
+import com.basemetas.fileview.preview.common.validation.SecurePath;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
@@ -50,6 +54,9 @@ public class FilePreviewRequest {
      * 对于LOCAL_UPLOAD类型，可以是临时ID（如temp_xxx），系统会自动生成稳定ID
      * 对于NETWORK_DOWNLOAD类型，如果为空，系统会基于URL自动生成
      */
+    @Size(max = 128, message = "fileId长度不能超过128")
+    @Pattern(regexp = "^[a-zA-Z0-9_.-]+$", message = "fileId只能包含字母、数字、下划线、中划线和点")
+    @NoPathTraversal(message = "fileId不能包含路径遍历相关字符")
     private String fileId;
     
     /** 
@@ -70,13 +77,19 @@ public class FilePreviewRequest {
     
     // ========== 服务器文件预览字段 ==========
     /** 源文件路径（用于SERVER_FILE类型） - 可以是目录或完整文件路径 */
+    @Size(max = 512, message = "srcRelativePath长度不能超过512")
+    @SecurePath(message = "srcRelativePath包含不安全的路径遍历字符")
     private String srcRelativePath;
     
     /** 源文件名 - 当srcRelativePath为目录时必须提供 */
+    @Size(max = 255, message = "fileName长度不能超过255")
+    @NoPathTraversal(message = "fileName不能包含路径遍历相关字符")
     private String fileName;
     
     private String targetPath;
     /** 目标文件名 - 如果为空则从fileName提取（去掉扩展名） */
+    @Size(max = 255, message = "targetFileName长度不能超过255")
+    @NoPathTraversal(message = "targetFileName不能包含路径遍历相关字符")
     private String targetFileName;
     
     /** 文件密码 - 用于加密文件的预览 */
@@ -87,9 +100,13 @@ public class FilePreviewRequest {
     
     // ========== 网络文件下载字段 ==========
     /** 网络文件URL（用于NETWORK_DOWNLOAD类型） */
+    @Size(max = 2048, message = "networkFileUrl长度不能超过2048")
+    @Pattern(regexp = "^(https?|ftp|ftps)://.*$", message = "networkFileUrl只允许http/https/ftp/ftps协议")
     private String networkFileUrl;
     
     /** 下载目标路径（用于NETWORK_DOWNLOAD类型） */
+    @Size(max = 512, message = "downloadTargetPath长度不能超过512")
+    @SecurePath(message = "downloadTargetPath包含不安全的路径遍历字符")
     private String downloadTargetPath;
     
     /** 网络文件用户名（FTP/SFTP/S3等需要认证的协议） */
