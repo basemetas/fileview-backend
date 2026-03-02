@@ -445,6 +445,14 @@ public class FilePreviewController {
                 if (cacheInfo == null) {
                     long elapsedSinceFirstCheck = System.currentTimeMillis() - firstCheckTime;
                     if (!fileIdEverExistedInCache && elapsedSinceFirstCheck > 3000) {
+                        // 宽限期触发前，检查是否有活跃下载任务（网络大文件下载中，CONVERTING 缓存尚未写入）
+                        DownloadTask activeTask = downloadTaskManager.getTask(fileId);
+                        if (activeTask != null && activeTask.getStatus() != DownloadTaskStatus.FAILED) {
+                            logger.debug("⏳ 宽限期内发现活跃下载任务，继续等待 - FileId: {}, TaskStatus: {}, Elapsed: {}ms",
+                                    fileId, activeTask.getStatus(), elapsedSinceFirstCheck);
+                            Thread.sleep(calculateAdaptiveInterval(attempt, intervalMs));
+                            continue;
+                        }
                         logger.warn("⚠️ 长轮询宽限期内未发现缓存记录，视为文件ID不存在或已过期 - FileId: {}, Elapsed: {}ms",
                                 fileId, elapsedSinceFirstCheck);
                         Map<String, Object> notFoundResponse = buildPollingResponse(

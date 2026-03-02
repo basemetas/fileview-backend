@@ -52,6 +52,9 @@ public class CacheWriteService {
     @Value("${fileview.preview.cache.direct-preview-ttl:86400}")
     private long directPreviewTtl;
 
+    @Value("${fileview.preview.cache.conversion.converting-ttl:600}")
+    private long convertingTtl;
+
     /**
      * 更新预览URL到Redis缓存
      * 使用与转换服务相同的缓存键格式,确保客户端能轮询到结果
@@ -486,6 +489,47 @@ public class CacheWriteService {
         clearDirectPreviewCache(fileId);
         clearConvertCache(fileId);
     }
-    
+
+    /**
+     * 写入转换中（CONVERTING）状态到 Redis 缓存。
+     * <p>
+     * 用于防止长轮询宽限期将合法的转换请求误判为 NOT_FOUND：
+     * 在发送转换 MQ 事件后立即写入，Key 与 SUCCESS 状态相同，
+     * 转换完成后由 updatePreviewUrlToCache 自动覆盖，无需手动更新。
+     *
+     * @param fileId       文件ID
+     * @param targetFormat 目标格式
+     */
+    public void saveConvertingStatus(String fileId, String targetFormat) {
+        if (fileId == null || fileId.trim().isEmpty()) {
+            logger.warn("⚠️ saveConvertingStatus: fileId 为空，跳过写入");
+            return;
+        }
+        if (targetFormat == null || targetFormat.trim().isEmpty()) {
+            logger.warn("⚠️ saveConvertingStatus: targetFormat 为空，跳过写入 - FileId: {}", fileId);
+            return;
+        }
+        try {
+            String cacheKey = cacheUtils.buildCacheKey(fileId, targetFormat);
+            String resultKey = cacheUtils.buildResultKey(fileId, targetFormat);
+
+            Map<String, Object> cacheData = new java.util.HashMap<>();
+            cacheData.put("status", "CONVERTING");
+            cacheData.put("fileId", fileId);
+            cacheData.put("targetFormat", targetFormat);
+            cacheData.put("conversionRequired", true);
+            cacheData.put("mode", "CONVERT");
+            cacheData.put("cachedAt", System.currentTimeMillis());
+
+            redisTemplate.opsForValue().set(cacheKey, cacheData, Duration.ofSeconds(convertingTtl));
+            redisTemplate.opsForValue().set(resultKey, cacheData, Duration.ofSeconds(convertingTtl));
+
+            logger.info("📝 CONVERTING 状态已写入缓存 - FileId: {}, TargetFormat: {}, TTL: {}s, Key: {}",
+                    fileId, targetFormat, convertingTtl, cacheKey);
+        } catch (Exception e) {
+            logger.warn("⚠️ 写入 CONVERTING 状态失败（不影响主流程）- FileId: {}, TargetFormat: {}",
+                    fileId, targetFormat, e);
+        }
+    }
 
 }

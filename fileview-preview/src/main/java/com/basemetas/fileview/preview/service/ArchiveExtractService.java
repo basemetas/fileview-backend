@@ -731,14 +731,19 @@ public class ArchiveExtractService {
         boolean external7zAvailable = EnvironmentUtils.isExternal7zAvailable();
         logger.info("🔍 环境检测 - WSL2: {}, 外部7z命令可用: {}", runningInWsl, external7zAvailable);
         
-        // Step 3: WSL2环境仅使用外部7z命令（参考转换模块策略，避免native崩溃）
-        if (runningInWsl) {
+        // Step 3: WSL2环境或不支持 native 的平台（如 ARM64），仅使用外部 7z 命令
+        boolean nativeSupported = EnvironmentUtils.isNativeSevenZipSupported();
+        if (runningInWsl || !nativeSupported) {
             if (!external7zAvailable) {
-                logger.error("❌ WSL2环境下外部7z命令不可用，无法安全提取 - File: {}", archiveFile.getName());
+                logger.error("❌ WSL2环境或不支持 native 的平台下外部 7z 命令不可用，无法安全提取 - File: {}", archiveFile.getName());
                 return ExtractResult.failure(
-                    "WSL2环境下需要p7zip-full支持，请在Docker镜像中安装：apt-get install p7zip-full");
+                    "WSL2环境或当前平台下需要p7zip-full支持，请在Docker镜像中安装：apt-get install p7zip-full");
             }
-            logger.info("🔄 WSL2环境检测到，仅使用外部7z命令提取（避免native崩溃）- File: {}", archiveFile.getName());
+            if (runningInWsl) {
+                logger.info("🔄 WSL2环境检测到，仅使用外部 7z 命令提取（避免 native 崩溃）- File: {}", archiveFile.getName());
+            } else {
+                logger.info("🔄 当前平台不支持 SevenZipJBinding native 库，直接使用外部 7z 命令提取 - File: {}", archiveFile.getName());
+            }
             return tryExtractWith7zCommand(archiveFile, targetFilePath, tempDir, password);
         }
         

@@ -330,16 +330,20 @@ public class FilePasswordValidator {
     /**
      * 使用SevenZipJBinding验证密码（通用方法）
      * 参考 ArchiveExtractService 的 WSL2 安全策略
-     * - WSL2环境：使用外部7z命令检测加密状态（避免native崩溃）
-     * - 非WSL2：使用native库验证（加全局锁保护）
+     * - WSL2 环境或不支持 native 的平台（如 ARM64）：使用外部 7z 命令检测加密状态
+     * - 支持 native 的平台：使用 native 库验证（加全局锁保护）
      */
     private PasswordValidationResult validate7zBasedPassword(File archiveFile, String password,
             String format, ArchiveFormat archiveFormat) {
-        // Step 0: WSL2环境检测（参考 ArchiveExtractService）
+        // Step 0: WSL2 环境或不支持 native 的平台检测
         boolean runningInWsl = EnvironmentUtils.isWslEnvironment();
-        if (runningInWsl) {
-            logger.warn("🔒 WSL2环境检测到，使用外部7z命令检测加密状态（避免native崩溃）- File: {}", archiveFile.getName());
-            // WSL2环境下使用外部7z命令检测是否加密
+        boolean nativeSupported = EnvironmentUtils.isNativeSevenZipSupported();
+        if (runningInWsl || !nativeSupported) {
+            if (runningInWsl) {
+                logger.info("🔒 WSL2 环境检测到，使用外部 7z 命令检测加密状态（避免 native 崩溃）- File: {}", archiveFile.getName());
+            } else {
+                logger.info("🔒 当前平台不支持 SevenZipJBinding native 库，使用外部 7z 命令检测加密状态 - File: {}", archiveFile.getName());
+            }
             return validate7zWithExternalCommand(archiveFile, password, format);
         }
 

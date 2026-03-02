@@ -37,6 +37,9 @@ public class EnvironmentUtils {
     
     // 缓存外部7z命令检测结果
     private static volatile Boolean cached7zAvailable = null;
+
+    // 缓存 SevenZipJBinding native 支持结果
+    private static volatile Boolean cachedNativeSevenZipSupported = null;
     
     /**
      * 检测是否为 WSL2 环境（参考转换模块 SevenZipParserService）
@@ -181,6 +184,49 @@ public class EnvironmentUtils {
         synchronized (EnvironmentUtils.class) {
             cached7zAvailable = null;
             return isExternal7zAvailable();
+        }
+    }
+
+    /**
+     * 检测当前 JVM 运行架构是否在 SevenZipJBinding 原生库支持列表内。
+     * <p>
+     * SevenZipJBinding 当前仅支持以下平台（来自 JAR 内嵌 native 库）：
+     * Linux-amd64 / Linux-i386 / Mac-x86_64 / Windows-amd64 / Windows-x86
+     * <p>
+     * ARM64（aarch64）、ARM32、RISC-V 等架构均不支持，应跳过 native 初始化，
+     * 直接使用外部 7z 命令作为替代方案。
+     *
+     * @return true 表示当前平台支持 SevenZipJBinding native 库
+     */
+    public static boolean isNativeSevenZipSupported() {
+        if (cachedNativeSevenZipSupported != null) {
+            return cachedNativeSevenZipSupported;
+        }
+        synchronized (EnvironmentUtils.class) {
+            if (cachedNativeSevenZipSupported != null) {
+                return cachedNativeSevenZipSupported;
+            }
+            String arch = System.getProperty("os.arch", "").toLowerCase();
+            String os = System.getProperty("os.name", "").toLowerCase();
+            boolean supported;
+            if (os.contains("linux")) {
+                supported = arch.equals("amd64") || arch.equals("x86_64")
+                        || arch.equals("i386") || arch.equals("i686");
+            } else if (os.contains("mac")) {
+                supported = arch.equals("x86_64") || arch.equals("amd64");
+            } else if (os.contains("windows")) {
+                supported = arch.equals("amd64") || arch.equals("x86_64") || arch.equals("x86");
+            } else {
+                supported = false;
+            }
+            cachedNativeSevenZipSupported = supported;
+            if (!supported) {
+                logger.info("ℹ️ 当前平台不支持 SevenZipJBinding native 库 - os.name: {}, os.arch: {}"
+                        + "，将使用外部7z命令作为替代方案", os, arch);
+            } else {
+                logger.debug("✅ 当前平台支持 SevenZipJBinding native 库 - os.name: {}, os.arch: {}", os, arch);
+            }
+            return supported;
         }
     }
 }

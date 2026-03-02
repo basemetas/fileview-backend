@@ -576,6 +576,8 @@ public class FilePreviewService {
             long totalProcessTime = System.currentTimeMillis() - startTime;
             logger.debug("⏱️ 转换MQ发送耗时: {}ms, 总处理耗时: {}ms - FileId: {}, TargetFormat: {}", 
                 mqSendTime, totalProcessTime, fileId, targetFormat);
+            // 🔑 写入 CONVERTING 状态缓存，防止长轮询宽限期将合法转换请求误判为 NOT_FOUND
+            cacheWriteService.saveConvertingStatus(fileId, targetFormat);
             // 返回转换中状态
             Map<String, Object> response = previewResponseAssembler.buildConverting(
                     fileId,

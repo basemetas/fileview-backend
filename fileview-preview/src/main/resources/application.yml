@@ -126,8 +126,8 @@ fileview:
     # 轮询策略配置
     polling:
       # 基础配置
-      default-timeout: 60          # 默认超时时间（秒）- 从 20 增加到 60，解决转换超时问题
-      max-timeout: 120             # 最大超时时间（秒）- 从 300 减少到 120，避免过长等待
+      default-timeout: 20          # 默认超时时间（秒）- 从 20 增加到 60，解决转换超时问题
+      max-timeout: 300             # 最大超时时间（秒）- 从 300 减少到 120，避免过长等待
       default-interval: 1000       # 默认检查间隔（毫秒）
       min-interval: 500            # 最小检查间隔（毫秒）
       max-interval: 5000           # 最大检查间隔（毫秒）
