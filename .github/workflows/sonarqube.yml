@@ -67,6 +67,6 @@ jobs:
             -Dsonar.organization=basemetas \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.qualitygate.wait=true \  # ⭐ 关键：等待质量门结果 [citation:3][citation:9]
-            -Dsonar.qualitygate.timeout=300   # 超时时间（秒）
+            -Dsonar.qualitygate.timeout=300 \  # 超时时间（秒）
             -Dsonar.test.inclusions=**/*Test.java,**/*Tests.java \
             -Dsonar.coverage.exclusions=**/*Test.java,**/*Tests.java
