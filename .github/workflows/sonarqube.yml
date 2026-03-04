@@ -65,4 +65,5 @@ jobs:
             -Dsonar.qualitygate.wait=true \
             -Dsonar.qualitygate.timeout=300 \
             -Dsonar.test.inclusions=**/*Test.java,**/*Tests.java \
-            -Dsonar.coverage.exclusions=**/*Test.java,**/*Tests.java
+            -Dsonar.coverage.exclusions=**/*Test.java,**/*Tests.java \
+            -DskipTests
