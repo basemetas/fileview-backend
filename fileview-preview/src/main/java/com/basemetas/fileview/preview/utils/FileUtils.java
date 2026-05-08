@@ -157,6 +157,23 @@ public class FileUtils {
     }
 
     /**
+     * 基于远程源身份生成稳定 fileId。
+     * 适用于 S3 等需要把 endpoint/bucket/region 纳入身份标识的场景。
+     */
+    public String generateFileIdFromSourceKey(String sourceKey) {
+        try {
+            if (sourceKey == null || sourceKey.trim().isEmpty()) {
+                throw new IllegalArgumentException("远程源标识不能为空");
+            }
+            String hash = encodingUtils.calculateMD5(sourceKey.trim());
+            return "preview_" + hash;
+        } catch (Exception e) {
+            logger.error("❌ 生成远程源fileId失败，使用时间戳作为降级方案", e);
+            return "download_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 10000);
+        }
+    }
+
+    /**
      * 将文件复制到目标路径
      * 
      * @param sourceFile    源文件
