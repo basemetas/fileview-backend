@@ -67,6 +67,19 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
+        <!-- S3 协议对象存储支持 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.20.162</version>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.20.162</version>
+        </dependency>
+
         <!-- SFTP支持 -->
         <dependency>
             <groupId>com.jcraft</groupId>
@@ -214,13 +227,8 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <id>repackage</id>
-                        <goals>
-                            <goal>repackage</goal>
-                        </goals>
-                    </execution>
-                    <execution>
                         <id>build-info</id>
+                        <phase>process-resources</phase>
                         <goals>
                             <!-- 生成构建信息文件 -->
                             <goal>build-info</goal>
@@ -231,6 +239,12 @@
                                 <releaseVersion>${releaseVersion}</releaseVersion>
                             </additionalProperties>
                         </configuration>
+                    </execution>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
