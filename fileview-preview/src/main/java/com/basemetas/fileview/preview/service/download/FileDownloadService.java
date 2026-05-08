@@ -20,6 +20,18 @@ import com.basemetas.fileview.preview.service.cache.CacheKeyManager;
 import com.basemetas.fileview.preview.utils.CacheUtils;
 import com.basemetas.fileview.preview.utils.HttpUtils;
 import com.basemetas.fileview.preview.common.exception.ErrorCode;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -123,6 +135,14 @@ public class FileDownloadService {
      */
     public String downloadFile(String fileUrl, String targetPath, String username, 
                               String password, int timeout, String fileName) {
+        return downloadFile(fileUrl, targetPath, username, password, timeout, fileName,
+                null, null, null, null, null, null);
+    }
+
+    public String downloadFile(String fileUrl, String targetPath, String username,
+                              String password, int timeout, String fileName,
+                              String accessKey, String secretKey, String bucket,
+                              String region, String endpoint, Boolean pathStyleAccessEnabled) {
         try {
             logger.info("🌐 开始下载网络文件 - URL: {}, Target: {}", httpUtils.encodeUrl(fileUrl), targetPath);
             
@@ -164,13 +184,14 @@ public class FileDownloadService {
                     throw new IOException("无法创建目标目录: " + targetPath);
                 }
             }           
-            // 6. 确定本地文件名并构建目标文件路径
+            // 6. 确定本地文件名并构建目标文件路径（加时间戳避免同名冲突）
             String effectiveFileName;
             if (fileName != null && !fileName.trim().isEmpty()) {
                 effectiveFileName = sanitizeFileName(fileName);
             } else {
                 effectiveFileName = httpUtils.extractFileNameFromUrl(encodedUrl);
             }
+            effectiveFileName = appendTimestamp(effectiveFileName);
             String targetFilePath = Paths.get(targetPath, effectiveFileName).toString();           
             logger.info("📥 文件下载信息 - Protocol: {}, FileName: {}, Timeout: {}ms", 
                        protocol, effectiveFileName, timeout);         
@@ -201,8 +222,9 @@ public class FileDownloadService {
                     break;
                     
                 case "s3":
-                    throw new UnsupportedOperationException("S3协议需要通过扩展参数传递认证信息，请使用downloadS3File方法");
-                    
+                    downloadS3File(fileUrl, targetFilePath, timeout, accessKey, secretKey, bucket, region, endpoint, pathStyleAccessEnabled);
+                    break;
+                     
                 default:
                     throw FileViewException.of(
                         ErrorCode.INVALID_PARAMETER,
@@ -226,6 +248,168 @@ public class FileDownloadService {
                 e
             );
         }
+    }
+
+    private void downloadS3File(String fileUrl, String targetFilePath, int timeout,
+                                String accessKey, String secretKey,
+                                String bucket, String region,
+                                String endpoint, Boolean pathStyleAccessEnabled) throws IOException {
+        S3Location location = parseS3Location(fileUrl, bucket);
+        String resolvedAccessKey = firstNonBlank(accessKey);
+        String resolvedSecretKey = firstNonBlank(secretKey);
+        String resolvedRegion = firstNonBlank(region, "us-east-1");
+        String resolvedEndpoint = normalizeEndpoint(firstNonBlank(endpoint));
+
+        if (resolvedAccessKey == null || resolvedSecretKey == null) {
+            throw new IOException("S3下载缺少访问凭证，请提供 accessKey 和 secretKey");
+        }
+
+        // 先下载到临时文件，验证完整性后 atomic rename 到最终路径
+        java.nio.file.Path finalPath = Paths.get(targetFilePath);
+        java.nio.file.Path tempPath = finalPath.resolveSibling(finalPath.getFileName() + ".part");
+
+        try (S3Client s3Client = buildS3Client(resolvedAccessKey, resolvedSecretKey, resolvedRegion, resolvedEndpoint, timeout, pathStyleAccessEnabled)) {
+            long contentLength = tryGetS3ContentLength(s3Client, location);
+            if (contentLength >= 0) {
+                logger.info("📊 S3 文件大小: {} bytes, Bucket: {}, Key: {}", contentLength, location.bucket(), location.key());
+            } else {
+                logger.info("📊 无法预先获取 S3 文件大小，将直接下载 - Bucket: {}, Key: {}", location.bucket(), location.key());
+            }
+
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(location.bucket())
+                    .key(location.key())
+                    .build();
+
+            s3Client.getObject(getObjectRequest, ResponseTransformer.toFile(tempPath));
+
+            long actualSize = Files.size(tempPath);
+            if (contentLength > 0 && actualSize != contentLength) {
+                Files.deleteIfExists(tempPath);
+                logger.error("❌ S3文件下载不完整 - 预期: {} bytes, 实际: {} bytes, Bucket: {}, Key: {}",
+                        contentLength, actualSize, location.bucket(), location.key());
+                throw new IOException(String.format(
+                        "S3文件下载不完整 - 预期: %d bytes, 实际: %d bytes",
+                        contentLength, actualSize));
+            }
+
+            // 完整性验证通过，rename 到最终路径
+            try {
+                Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(tempPath, finalPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (NoSuchKeyException e) {
+            Files.deleteIfExists(tempPath);
+            logger.error("❌ S3对象不存在 - Bucket: {}, Key: {}", location.bucket(), location.key(), e);
+            throw new IOException("S3对象不存在，请检查文件路径是否正确", e);
+        } catch (S3Exception e) {
+            Files.deleteIfExists(tempPath);
+            String detailMsg = e.awsErrorDetails() != null ? e.awsErrorDetails().errorMessage() : e.getMessage();
+            logger.error("❌ S3下载失败 - Bucket: {}, Key: {}, Status: {}, Detail: {}",
+                    location.bucket(), location.key(), e.statusCode(), detailMsg, e);
+            throw new IOException("S3下载失败（状态码: " + e.statusCode() + "），请检查存储配置", e);
+        } catch (IOException e) {
+            Files.deleteIfExists(tempPath);
+            throw e;
+        }
+    }
+
+    private S3Client buildS3Client(String accessKey, String secretKey, String region, String endpoint, int timeout, Boolean pathStyleAccessEnabled) {
+        var builder = S3Client.builder()
+                .httpClientBuilder(UrlConnectionHttpClient.builder())
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(accessKey, secretKey)))
+                .overrideConfiguration(ClientOverrideConfiguration.builder()
+                        .apiCallAttemptTimeout(Duration.ofMillis(timeout))
+                        .apiCallTimeout(Duration.ofMillis(Math.max(timeout * 5L, 300_000L)))
+                        .build())
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(Boolean.TRUE.equals(pathStyleAccessEnabled))
+                        .build());
+
+        if (endpoint != null && !endpoint.isBlank()) {
+            builder.endpointOverride(URI.create(endpoint));
+        }
+        return builder.build();
+    }
+
+    private long tryGetS3ContentLength(S3Client s3Client, S3Location location) {
+        try {
+            HeadObjectRequest headRequest = HeadObjectRequest.builder()
+                    .bucket(location.bucket())
+                    .key(location.key())
+                    .build();
+            return s3Client.headObject(headRequest).contentLength();
+        } catch (S3Exception e) {
+            logger.warn("⚠️ S3 HeadObject 失败，将继续尝试 GetObject - Bucket: {}, Key: {}, Status: {}, Message: {}",
+                    location.bucket(), location.key(), e.statusCode(), e.awsErrorDetails() != null ? e.awsErrorDetails().errorMessage() : e.getMessage());
+            return -1L;
+        }
+    }
+
+    private S3Location parseS3Location(String fileUrl, String requestBucket) throws IOException {
+        try {
+            URI uri = new URI(fileUrl.trim());
+            String bucketFromUrl = uri.getHost();
+            String bucket = firstNonBlank(requestBucket, bucketFromUrl);
+            // 使用 getRawPath 避免隐式解码，然后显式 UTF-8 解码一次
+            String rawPath = uri.getRawPath();
+            String key = rawPath != null ? URLDecoder.decode(rawPath, java.nio.charset.StandardCharsets.UTF_8) : null;
+
+            if (key != null && key.startsWith("/")) {
+                key = key.substring(1);
+            }
+
+            if ((bucketFromUrl == null || bucketFromUrl.isBlank())
+                    && bucket != null && !bucket.isBlank()
+                    && key != null && !key.isBlank()) {
+                String normalizedBucket = bucket.trim();
+                String bucketPrefix = normalizedBucket + "/";
+                if (key.equals(normalizedBucket)) {
+                    key = "";
+                } else if (key.startsWith(bucketPrefix)) {
+                    key = key.substring(bucketPrefix.length());
+                }
+            }
+
+            if (bucket == null || bucket.isBlank()) {
+                throw new IOException("S3下载缺少 bucket，请在URL中使用 s3://bucket/key 或显式传入 bucket");
+            }
+            if (key == null || key.isBlank()) {
+                throw new IOException("S3下载缺少对象 key，请使用 s3://bucket/key 格式");
+            }
+
+            return new S3Location(bucket, key);
+        } catch (URISyntaxException e) {
+            throw new IOException("S3 URL 格式无效: " + fileUrl, e);
+        }
+    }
+
+    private String normalizeEndpoint(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return null;
+        }
+        if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
+            return endpoint;
+        }
+        return "https://" + endpoint;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private record S3Location(String bucket, String key) {
     }
     
     /**
@@ -610,6 +794,25 @@ public class FileDownloadService {
         }
         return name;
     }
+    /**
+     * 在文件名的 basename 和扩展名之间插入唯一标识，确保本地文件名唯一。
+     * 使用 UUID 前 8 位（hex）避免同毫秒并发冲突。
+     * 例如: "report.docx" → "report_a3f1b2c4.docx"
+     */
+    private String appendTimestamp(String fileName) {
+        String uniqueId = java.util.UUID.randomUUID().toString().substring(0, 8);
+        if (fileName == null || fileName.isBlank()) {
+            return "download_" + uniqueId;
+        }
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            String baseName = fileName.substring(0, dotIndex);
+            String extension = fileName.substring(dotIndex);
+            return baseName + "_" + uniqueId + extension;
+        }
+        return fileName + "_" + uniqueId;
+    }
+
     private void copyIfNeeded(String src, String dest) throws IOException {
         if (src == null || dest == null || src.equals(dest)) {
             return;
