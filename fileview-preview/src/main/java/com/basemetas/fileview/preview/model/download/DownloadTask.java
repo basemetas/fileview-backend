@@ -38,6 +38,13 @@ public class DownloadTask {
     private String clientId;  // 🔑 客户端标识（用于密码解锁状态查询）
     private String requestBaseUrl;  // 🔑 请求的 baseUrl（用于生成预览地址）
     private String fileName;        // 原始文件名（来自前端，可选）
+    private String storage;         // OSS实例名称
+    private String accessKey;     // S3 Access Key
+    private String secretKey;     // S3 Secret Key
+    private String bucket;        // S3 Bucket
+    private String region;        // S3 Region
+    private String endpoint;      // S3 Endpoint
+    private Boolean pathStyleAccessEnabled; // S3 Path-Style 开关
     
     // 构造函数
     public DownloadTask() {
@@ -189,6 +196,62 @@ public class DownloadTask {
     
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getStorage() {
+        return storage;
+    }
+
+    public void setStorage(String storage) {
+        this.storage = storage;
+    }
+
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public void setAccessKey(String accessKey) {
+        this.accessKey = accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
+    }
+
+    public String getBucket() {
+        return bucket;
+    }
+
+    public void setBucket(String bucket) {
+        this.bucket = bucket;
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public void setEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    public Boolean getPathStyleAccessEnabled() {
+        return pathStyleAccessEnabled;
+    }
+
+    public void setPathStyleAccessEnabled(Boolean pathStyleAccessEnabled) {
+        this.pathStyleAccessEnabled = pathStyleAccessEnabled;
     }
     
     @Override
