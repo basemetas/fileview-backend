@@ -24,7 +24,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -37,8 +39,17 @@ public class DownloadTaskManager {
     
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private DownloadDeduplicationService downloadDeduplicationService;
+
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final long TASK_EXPIRE_TIME = 24 * 60 * 60; // 24小时过期
+
+    /** Lua 脚本：仅当 key 的值等于期望值时才删除（compare-and-delete） */
+    private static final DefaultRedisScript<Long> CAS_DELETE_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            Long.class);
     
     /**
      * 创建下载任务
@@ -55,10 +66,29 @@ public class DownloadTaskManager {
         task.setFileName(request.getFileName());
         task.setPassWord(request.getPassword()); // 🔑 设置压缩包密码
         task.setClientId(request.getClientId()); // 🔑 设置客户端标识
-        
+        task.setStorage(request.getStorage());
+        task.setAccessKey(request.getAccessKey());
+        task.setSecretKey(request.getSecretKey());
+        task.setBucket(request.getBucket());
+        task.setRegion(request.getRegion());
+        task.setEndpoint(request.getEndpoint());
+        task.setPathStyleAccessEnabled(request.getPathStyleAccessEnabled());
+
         // 存储到Redis
         String key = CacheKeyManager.DOWNLOAD_TASK_PREFIX + task.getFileId(); // 使用fileId作Redis键
         redisTemplate.opsForValue().set(key, task, TASK_EXPIRE_TIME, TimeUnit.SECONDS);
+
+        String sourceKey = downloadDeduplicationService.buildSourceKey(
+                request.getNetworkFileUrl(),
+                request.getBucket(),
+                request.getRegion(),
+                request.getEndpoint(),
+                request.getStorage(),
+                request.getPathStyleAccessEnabled());
+        if (sourceKey != null && !sourceKey.isBlank()) {
+            String sourceTaskKey = CacheKeyManager.buildDownloadTaskKey(sourceKey);
+            redisTemplate.opsForValue().setIfAbsent(sourceTaskKey, task.getFileId(), TASK_EXPIRE_TIME, TimeUnit.SECONDS);
+        }
         
         logger.info("创建下载任务 - FileId: {}", task.getFileId());
         return task;
@@ -96,6 +126,7 @@ public class DownloadTaskManager {
                 task.setFinishedTime(System.currentTimeMillis());
                 task.setProgress(100.0);
                 redisTemplate.opsForValue().set(key, task, TASK_EXPIRE_TIME, TimeUnit.SECONDS);
+                removeSourceTaskMapping(task);
             }
         }
     }
@@ -113,6 +144,7 @@ public class DownloadTaskManager {
                 task.setErrorMessage(errorMessage);
                 task.setFinishedTime(System.currentTimeMillis());
                 redisTemplate.opsForValue().set(key, task, TASK_EXPIRE_TIME, TimeUnit.SECONDS);
+                removeSourceTaskMapping(task);
             }
         }
     }
@@ -164,6 +196,25 @@ public class DownloadTaskManager {
         
         logger.warn("无法转换对象类型: {}", obj.getClass().getName());
         return null;
+    }
+
+    private void removeSourceTaskMapping(DownloadTask task) {
+        if (task == null) {
+            return;
+        }
+        String sourceKey = downloadDeduplicationService.buildSourceKey(
+                task.getNetworkFileUrl(),
+                task.getBucket(),
+                task.getRegion(),
+                task.getEndpoint(),
+                task.getStorage(),
+                task.getPathStyleAccessEnabled());
+        if (sourceKey == null || sourceKey.isBlank()) {
+            return;
+        }
+        String lockKey = CacheKeyManager.buildDownloadTaskKey(sourceKey);
+        // 仅当锁的值是当前 taskId 时才删除，避免误删其他任务的锁
+        redisTemplate.execute(CAS_DELETE_SCRIPT, Collections.singletonList(lockKey), task.getFileId());
     }
 
 
