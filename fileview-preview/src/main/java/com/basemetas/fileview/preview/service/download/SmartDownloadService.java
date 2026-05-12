@@ -135,7 +135,8 @@ public class SmartDownloadService {
      */
     public String smartDownload(String fileUrl, String targetPath, String username,
                                 String password, int timeout, boolean useSmartDownload) throws Exception {
-        return smartDownload(fileUrl, targetPath, username, password, timeout, useSmartDownload, null);
+        return smartDownload(fileUrl, targetPath, username, password, timeout, useSmartDownload, null,
+                null, null, null, null, null, null);
     }
     
     /**
@@ -152,12 +153,30 @@ public class SmartDownloadService {
      */
     public String smartDownload(String fileUrl, String targetPath, String username,
                                 String password, int timeout, boolean useSmartDownload, String fileName) throws Exception {
+        return smartDownload(fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName,
+                null, null, null, null, null, null);
+    }
+
+    public String smartDownload(String fileUrl, String targetPath, String username,
+                                String password, int timeout, boolean useSmartDownload, String fileName,
+                                String accessKey, String secretKey, String bucket,
+                                String region, String endpoint, Boolean pathStyleAccessEnabled) throws Exception {
         // 仅当调用方偏好为true 且 配置开关启用 且 未指定自定义文件名 时，才走智能下载
-        if (useSmartDownload && smartDownloadEnabled && (fileName == null || fileName.trim().isEmpty())) {
+        if (useSmartDownload && smartDownloadEnabled && isHttpLikeUrl(fileUrl)
+                && (fileName == null || fileName.trim().isEmpty())) {
             return smartDownload(fileUrl, targetPath, username, password, timeout);
         }
         // 否则直接下载（跳过ETag/Last-Modified检查），并在底层使用自定义文件名（如果有）
-        return fileDownloadService.downloadFile(fileUrl, targetPath, username, password, timeout, fileName);
+        return fileDownloadService.downloadFile(fileUrl, targetPath, username, password, timeout, fileName,
+                accessKey, secretKey, bucket, region, endpoint, pathStyleAccessEnabled);
+    }
+
+    private boolean isHttpLikeUrl(String fileUrl) {
+        if (fileUrl == null) {
+            return false;
+        }
+        String normalized = fileUrl.trim().toLowerCase();
+        return normalized.startsWith("http://") || normalized.startsWith("https://");
     }
     
     /**

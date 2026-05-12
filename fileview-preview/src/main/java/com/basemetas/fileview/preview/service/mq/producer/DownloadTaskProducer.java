@@ -56,6 +56,16 @@ public class DownloadTaskProducer {
             message.setClientId(task.getClientId()); // 🔑 传递客户端标识
             message.setRequestBaseUrl(task.getRequestBaseUrl()); // 🔑 传递 requestBaseUrl
             message.setFileName(task.getFileName()); // 🔑 传递前端文件名
+            message.setStorage(task.getStorage());
+            // 命名实例时不传递凭证到 MQ（减少暴露面），consumer 端从配置重新获取
+            if (task.getStorage() == null || task.getStorage().trim().isEmpty()) {
+                message.setAccessKey(task.getAccessKey());
+                message.setSecretKey(task.getSecretKey());
+            }
+            message.setBucket(task.getBucket());
+            message.setRegion(task.getRegion());
+            message.setEndpoint(task.getEndpoint());
+            message.setPathStyleAccessEnabled(task.getPathStyleAccessEnabled());
             
             Map<String, Object> headers = new HashMap<>();
             headers.put("fileId", task.getFileId());

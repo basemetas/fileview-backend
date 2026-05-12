@@ -18,6 +18,7 @@ package com.basemetas.fileview.preview.service.mq.consumer;
 import com.basemetas.fileview.preview.model.request.FilePreviewRequest;
 import com.basemetas.fileview.preview.model.download.DownloadTaskMessage;
 import com.basemetas.fileview.preview.model.download.DownloadTaskStatus;
+import com.basemetas.fileview.preview.config.OssProperties;
 import com.basemetas.fileview.preview.service.download.DownloadDeduplicationService;
 import com.basemetas.fileview.preview.service.download.DownloadResult;
 import com.basemetas.fileview.preview.service.download.DownloadTaskManager;
@@ -53,6 +54,9 @@ public class DownloadTaskConsumer {
     
     @Autowired
     private DownloadUtils downloadUtils;
+
+    @Autowired
+    private OssProperties ossProperties;
 
     public void onMessage(DownloadTaskMessage message) {
         String fileId = message.getFileId(); // 使用fileId作为任务标识符
@@ -103,7 +107,9 @@ public class DownloadTaskConsumer {
                 fileId, useSmartDownload, httpUtils.maskSensitiveUrl(fileUrl));
             
             DownloadResult downloadResult = downloadDeduplicationService.downloadWithDeduplication(
-                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName);
+                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName,
+                resolveAccessKey(message), resolveSecretKey(message), message.getBucket(),
+                message.getRegion(), message.getEndpoint(), message.getPathStyleAccessEnabled(), message.getStorage(), fileId);
             long downloadEndTime = System.currentTimeMillis();
             long downloadDuration = downloadEndTime - downloadStartTime;
             logger.info("⏱️ 下载执行耗时: {}ms - FileId: {}", downloadDuration, fileId);
@@ -179,5 +185,29 @@ public class DownloadTaskConsumer {
         } catch (Exception e) {
             logger.error("触发文件预览失败 - FileId: {}", message.getFileId(), e);
         }
+    }
+
+    /**
+     * 解析 accessKey：命名实例从配置获取，直接凭证从消息获取
+     */
+    private String resolveAccessKey(DownloadTaskMessage message) {
+        String storage = message.getStorage();
+        if (storage != null && !storage.trim().isEmpty()) {
+            OssProperties.OssInstance instance = ossProperties.getInstance(storage.trim());
+            return instance != null ? instance.getAccessKey() : message.getAccessKey();
+        }
+        return message.getAccessKey();
+    }
+
+    /**
+     * 解析 secretKey：命名实例从配置获取，直接凭证从消息获取
+     */
+    private String resolveSecretKey(DownloadTaskMessage message) {
+        String storage = message.getStorage();
+        if (storage != null && !storage.trim().isEmpty()) {
+            OssProperties.OssInstance instance = ossProperties.getInstance(storage.trim());
+            return instance != null ? instance.getSecretKey() : message.getSecretKey();
+        }
+        return message.getSecretKey();
     }
 }

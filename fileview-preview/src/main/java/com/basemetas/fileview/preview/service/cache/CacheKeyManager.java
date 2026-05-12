@@ -15,6 +15,10 @@
  */
 package com.basemetas.fileview.preview.service.cache;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
 /**
  * Redis 缓存键统一管理类
  * 集中维护所有 Redis 缓存键的前缀和构建方法
@@ -163,11 +167,25 @@ public class CacheKeyManager {
     /**
      * 构建下载任务缓存键
      * 
-     * @param urlHash URL哈希值
+     * @param sourceKey 远程源唯一标识（会在方法内部统一哈希）
      * @return 缓存键
      */
-    public static String buildDownloadTaskKey(String urlHash) {
-        return DOWNLOAD_TASK_PREFIX + urlHash;
+    public static String buildDownloadTaskKey(String sourceKey) {
+        return DOWNLOAD_TASK_PREFIX + md5Hex(sourceKey);
+    }
+
+    private static String md5Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("MD5");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("MD5 algorithm not available", e);
+        }
     }
     
     /**

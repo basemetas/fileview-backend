@@ -97,19 +97,16 @@ fileview:
       secret-key:
       # 连接超时时间(毫秒)
       timeout: 30000
-    # OSS对象存储配置
+    # OSS对象存储实例配置（命名实例，支持多个）
     oss:
-      # OSS类型: aliyun, aws-s3, minio
-      provider: aliyun
-      # 访问密钥
-      access-key: 
-      secret-key: 
-      # Bucket名称
-      bucket: fileview-storage
-      # Endpoint地址
-      endpoint: oss-cn-hangzhou.aliyuncs.com
-      # 预签名URL过期时间(小时)
-      url-expiration-hours: 1
+      minioA:
+        provider: s3
+        bucket:
+        endpoint:
+        region: us-east-1
+        access-key:
+        secret-key:
+        path-style-access-enabled: true
       
   preview:
     # 预览URL配置

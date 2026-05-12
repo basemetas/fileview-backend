@@ -31,6 +31,13 @@ public class DownloadTaskMessage {
     private String clientId;  // 🔑 客户端标识（用于密码解锁状态查询）
     private String requestBaseUrl;  // 🔑 请求的 baseUrl（用于生成预览地址）
     private String fileName;  // 🔑 前端传入的文件名（可选）
+    private String storage;
+    private String accessKey;
+    private String secretKey;
+    private String bucket;
+    private String region;
+    private String endpoint;
+    private Boolean pathStyleAccessEnabled;
     
     // 构造函数
     public DownloadTaskMessage() {
@@ -123,6 +130,62 @@ public class DownloadTaskMessage {
     
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getStorage() {
+        return storage;
+    }
+
+    public void setStorage(String storage) {
+        this.storage = storage;
+    }
+
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public void setAccessKey(String accessKey) {
+        this.accessKey = accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
+    }
+
+    public String getBucket() {
+        return bucket;
+    }
+
+    public void setBucket(String bucket) {
+        this.bucket = bucket;
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public void setEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    public Boolean getPathStyleAccessEnabled() {
+        return pathStyleAccessEnabled;
+    }
+
+    public void setPathStyleAccessEnabled(Boolean pathStyleAccessEnabled) {
+        this.pathStyleAccessEnabled = pathStyleAccessEnabled;
     }
     
     @Override

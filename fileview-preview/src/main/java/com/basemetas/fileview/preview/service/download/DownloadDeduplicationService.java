@@ -58,7 +58,8 @@ public class DownloadDeduplicationService {
      */
     public DownloadResult downloadWithDeduplication(String fileUrl, String targetPath, String username,
             String password, int timeout) throws Exception {
-        return downloadWithDeduplication(fileUrl, targetPath, username, password, timeout, true, null);
+        return downloadWithDeduplication(fileUrl, targetPath, username, password, timeout, true, null,
+                null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -76,13 +77,23 @@ public class DownloadDeduplicationService {
      */
     public DownloadResult downloadWithDeduplication(String fileUrl, String targetPath, String username,
             String password, int timeout, boolean useSmartDownload, String fileName) throws Exception {
+        return downloadWithDeduplication(fileUrl, targetPath, username, password, timeout, useSmartDownload,
+                fileName, null, null, null, null, null, null, null, null);
+    }
+
+    public DownloadResult downloadWithDeduplication(String fileUrl, String targetPath, String username,
+            String password, int timeout, boolean useSmartDownload, String fileName,
+            String accessKey, String secretKey, String bucket, String region,
+            String endpoint, Boolean pathStyleAccessEnabled, String storage, String currentTaskId) throws Exception {
+
+        String sourceKey = buildSourceKey(fileUrl, bucket, region, endpoint, storage, pathStyleAccessEnabled);
 
         boolean hasCustomFileName = fileName != null && !fileName.trim().isEmpty();
 
         // 1. 检查是否已有相同URL的下载任务正在进行（仅在未指定自定义文件名时复用）
         if (!hasCustomFileName) {
-            String existingTaskId = checkExistingDownloadTask(fileUrl);
-            if (existingTaskId != null) {
+            String existingTaskId = checkExistingDownloadTask(sourceKey);
+            if (existingTaskId != null && !existingTaskId.equals(currentTaskId)) {
                 return DownloadResult.pending(existingTaskId);
             }
         }
@@ -90,7 +101,7 @@ public class DownloadDeduplicationService {
         // 2. 基于内容哈希检查文件是否已存在（仅在未指定自定义文件名时复用）
         String existingFilePath = null;
         if (!hasCustomFileName) {
-            existingFilePath = checkFileExistsByHash(fileUrl);
+            existingFilePath = checkFileExistsByHash(sourceKey);
         }
         if (existingFilePath != null) {
             return DownloadResult.success(existingFilePath);
@@ -98,10 +109,11 @@ public class DownloadDeduplicationService {
 
         // 3. 使用智能下载或直接下载（统一由SmartDownloadService根据偏好与配置判断）
         String downloadedFilePath = smartDownloadService.smartDownload(
-                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName);
+                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName,
+                accessKey, secretKey, bucket, region, endpoint, pathStyleAccessEnabled);
 
         // 4. 记录文件哈希值
-        recordFileHash(fileUrl, downloadedFilePath);
+        recordFileHash(sourceKey, downloadedFilePath);
 
         return DownloadResult.success(downloadedFilePath);
     }
@@ -112,14 +124,13 @@ public class DownloadDeduplicationService {
      * @param fileUrl 文件URL
      * @return 正在进行的任务ID，如果没有则返回null
      */
-    private String checkExistingDownloadTask(String fileUrl) {
+    private String checkExistingDownloadTask(String sourceKey) {
         try {
-            String urlHash = downloadUtils.calculateMD5(fileUrl);
-            String taskKey = CacheKeyManager.buildDownloadTaskKey(urlHash);
+            String taskKey = CacheKeyManager.buildDownloadTaskKey(sourceKey);
 
             return (String) redisTemplate.opsForValue().get(taskKey);
         } catch (Exception e) {
-            logger.warn("检查现有下载任务时发生异常 - URL: {}", downloadUtils.maskSensitiveUrl(fileUrl), e);
+            logger.warn("检查现有下载任务时发生异常 - SourceKey: {}", sourceKey, e);
             return null;
         }
     }
@@ -130,10 +141,10 @@ public class DownloadDeduplicationService {
      * @param fileUrl 文件URL
      * @return 已存在的文件路径，如果不存在则返回null
      */
-    public String checkFileExistsByHash(String fileUrl) {
+    public String checkFileExistsByHash(String sourceKey) {
         try {
             // 生成文件URL的唯一标识
-            String urlHash = downloadUtils.calculateMD5(fileUrl);
+            String urlHash = downloadUtils.calculateMD5(sourceKey);
             String pathKey = CacheKeyManager.buildFilePathMappingKey(urlHash);
             
             // 检查Redis中是否已存在该文件的哈希值
@@ -142,12 +153,12 @@ public class DownloadDeduplicationService {
                 String hashKey = CacheKeyManager.buildFileHashKey(fileHash);
                 String existingFilePath = (String) redisTemplate.opsForValue().get(hashKey);
                 if (existingFilePath != null && new File(existingFilePath).exists()) {
-                    logger.info("文件已存在，避免重复下载 - URL: {}, Path: {}", downloadUtils.maskSensitiveUrl(fileUrl), existingFilePath);
+                    logger.info("文件已存在，避免重复下载 - SourceKey: {}, Path: {}", sourceKey, existingFilePath);
                     return existingFilePath;
                 }
             }
         } catch (Exception e) {
-            logger.warn("检查文件去重时发生异常 - URL: {}", downloadUtils.maskSensitiveUrl(fileUrl), e);
+            logger.warn("检查文件去重时发生异常 - SourceKey: {}", sourceKey, e);
         }
         return null;
     }
@@ -158,11 +169,11 @@ public class DownloadDeduplicationService {
      * @param fileUrl 文件URL
      * @param filePath 文件路径
      */
-    public void recordFileHash(String fileUrl, String filePath) {
+    public void recordFileHash(String sourceKey, String filePath) {
         try {
             // 计算文件内容的MD5哈希值
             String fileHash = downloadUtils.calculateMD5(filePath);
-            String urlHash = downloadUtils.calculateMD5(fileUrl);
+            String urlHash = downloadUtils.calculateMD5(sourceKey);
             
             // 存储文件哈希值和路径的映射关系
             String hashKey = CacheKeyManager.buildFileHashKey(fileHash);
@@ -172,9 +183,39 @@ public class DownloadDeduplicationService {
             redisTemplate.opsForValue().set(hashKey, filePath, 7, TimeUnit.DAYS);
             redisTemplate.opsForValue().set(pathKey, fileHash, 7, TimeUnit.DAYS);
             
-            logger.info("记录文件哈希值 - URL: {}, Hash: {}, Path: {}", downloadUtils.maskSensitiveUrl(fileUrl), fileHash, filePath);
+            logger.info("记录文件哈希值 - SourceKey: {}, Hash: {}, Path: {}", sourceKey, fileHash, filePath);
         } catch (Exception e) {
-            logger.warn("记录文件哈希值时发生异常 - URL: {}, Path: {}", downloadUtils.maskSensitiveUrl(fileUrl), filePath, e);
+            logger.warn("记录文件哈希值时发生异常 - SourceKey: {}, Path: {}", sourceKey, filePath, e);
         }
+    }
+
+    public String buildSourceKey(String fileUrl, String bucket, String region, String endpoint, String storage, Boolean pathStyleAccessEnabled) {
+        if (fileUrl == null) {
+            return null;
+        }
+        if (!fileUrl.toLowerCase().startsWith("s3://")) {
+            return fileUrl;
+        }
+        String bucketPart = bucket == null ? "" : bucket.trim();
+        String regionPart = region == null ? "" : region.trim();
+        String endpointPart = normalizeEndpointForKey(endpoint);
+        String storagePart = storage == null ? "" : storage.trim();
+        String pathStylePart = pathStyleAccessEnabled == null ? "" : pathStyleAccessEnabled.toString();
+        return fileUrl.trim() + "|storage=" + storagePart + "|bucket=" + bucketPart + "|region=" + regionPart + "|endpoint=" + endpointPart + "|pathStyle=" + pathStylePart;
+    }
+
+    /**
+     * 规范化 endpoint 用于去重 key：去尾部斜杠、统一小写 scheme
+     */
+    private String normalizeEndpointForKey(String endpoint) {
+        if (endpoint == null || endpoint.trim().isEmpty()) {
+            return "";
+        }
+        String normalized = endpoint.trim().toLowerCase();
+        // 去尾部斜杠
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 }

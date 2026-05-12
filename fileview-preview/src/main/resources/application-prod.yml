@@ -78,13 +78,16 @@ fileview:
       access-key: 
       secret-key:
       timeout: 30000
+    # OSS对象存储实例配置（命名实例，支持多个）
     oss:
-      provider: aliyun
-      access-key: 
-      secret-key: 
-      bucket: fileview-storage
-      endpoint: oss-cn-hangzhou.aliyuncs.com
-      url-expiration-hours: 1
+      minioA:
+        provider: s3
+        bucket:
+        endpoint:
+        region: us-east-1
+        access-key:
+        secret-key:
+        path-style-access-enabled: true
       
   preview:
     url:

@@ -18,6 +18,7 @@ package com.basemetas.fileview.preview.common;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.info.BuildProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -36,12 +37,16 @@ public class BuildInfoLogger {
     
     private final BuildProperties buildProperties;
     
-    public BuildInfoLogger(BuildProperties buildProperties) {
-        this.buildProperties = buildProperties;
+    public BuildInfoLogger(ObjectProvider<BuildProperties> buildPropertiesProvider) {
+        this.buildProperties = buildPropertiesProvider.getIfAvailable();
     }
     
     @EventListener(ContextRefreshedEvent.class)
     public void logBuildInfo() {
+        if (buildProperties == null) {
+            logger.warn("⚠️ 未找到 BuildProperties（META-INF/build-info.properties 缺失），跳过构建信息打印");
+            return;
+        }
         logger.info("=".repeat(80));
         logger.info("🚀 应用启动信息");
         logger.info("=".repeat(80));

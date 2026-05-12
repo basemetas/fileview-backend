@@ -101,7 +101,7 @@ public class FilePreviewRequest {
     // ========== 网络文件下载字段 ==========
     /** 网络文件URL（用于NETWORK_DOWNLOAD类型） */
     @Size(max = 2048, message = "networkFileUrl长度不能超过2048")
-    @Pattern(regexp = "^(https?|ftp|ftps)://.*$", message = "networkFileUrl只允许http/https/ftp/ftps协议")
+    @Pattern(regexp = "^(https?|ftp|ftps|s3)://.*$", message = "networkFileUrl只允许http/https/ftp/ftps/s3协议")
     private String networkFileUrl;
     
     /** 下载目标路径（用于NETWORK_DOWNLOAD类型） */
@@ -114,18 +114,27 @@ public class FilePreviewRequest {
     
     /** 网络文件密码（FTP/SFTP等需要认证的协议） */
     private String networkPassword;
+
+    /** OSS实例名称（调用方传递，表示 fileview.oss 下的实例名） */
+    private String storage;
     
     /** S3 Access Key（S3协议使用） */
-    private String s3AccessKey;
+    private String accessKey;
     
     /** S3 Secret Key（S3协议使用） */
-    private String s3SecretKey;
+    private String secretKey;
     
     /** S3 Bucket名称（S3协议使用） */
-    private String s3Bucket;
+    private String bucket;
     
     /** S3 Region（S3协议使用） */
-    private String s3Region;
+    private String region;
+
+    /** S3 Endpoint（S3协议使用，可选，支持 MinIO/兼容 S3 的 OSS） */
+    private String endpoint;
+
+    /** S3 Path-Style 开关（S3协议使用） */
+    private Boolean pathStyleAccessEnabled;
     
     /** 下载超时时间（毫秒），默认60秒 */
     private int downloadTimeout = 60000;
@@ -291,37 +300,61 @@ public class FilePreviewRequest {
     public void setNetworkPassword(String networkPassword) {
         this.networkPassword = networkPassword;
     }
-    
-    public String getS3AccessKey() {
-        return s3AccessKey;
+
+    public String getStorage() {
+        return storage;
+    }
+
+    public void setStorage(String storage) {
+        this.storage = storage;
     }
     
-    public void setS3AccessKey(String s3AccessKey) {
-        this.s3AccessKey = s3AccessKey;
+    public String getAccessKey() {
+        return accessKey;
     }
     
-    public String getS3SecretKey() {
-        return s3SecretKey;
+    public void setAccessKey(String accessKey) {
+        this.accessKey = accessKey;
     }
     
-    public void setS3SecretKey(String s3SecretKey) {
-        this.s3SecretKey = s3SecretKey;
+    public String getSecretKey() {
+        return secretKey;
     }
     
-    public String getS3Bucket() {
-        return s3Bucket;
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
     }
     
-    public void setS3Bucket(String s3Bucket) {
-        this.s3Bucket = s3Bucket;
+    public String getBucket() {
+        return bucket;
     }
     
-    public String getS3Region() {
-        return s3Region;
+    public void setBucket(String bucket) {
+        this.bucket = bucket;
     }
     
-    public void setS3Region(String s3Region) {
-        this.s3Region = s3Region;
+    public String getRegion() {
+        return region;
+    }
+    
+    public void setRegion(String region) {
+        this.region = region;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public void setEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    public Boolean getPathStyleAccessEnabled() {
+        return pathStyleAccessEnabled;
+    }
+
+    public void setPathStyleAccessEnabled(Boolean pathStyleAccessEnabled) {
+        this.pathStyleAccessEnabled = pathStyleAccessEnabled;
     }
     
     public int getDownloadTimeout() {
@@ -405,7 +438,12 @@ public class FilePreviewRequest {
                 ", passWord='" + (password != null ? "***" : null) + '\'' +
                 ", clientId='" + (clientId != null ? clientId : null) + '\'' +
                 ", networkFileUrl='" + networkFileUrl + '\'' +
+                ", storage='" + storage + '\'' +
                 ", downloadTargetPath='" + downloadTargetPath + '\'' +
+                ", bucket='" + bucket + '\'' +
+                ", region='" + region + '\'' +
+                ", endpoint='" + endpoint + '\'' +
+                ", pathStyleAccessEnabled=" + pathStyleAccessEnabled +
                 ", forceRegenerate=" + forceRegenerate +
                 ", preferredFormat='" + preferredFormat + '\'' +
                 ", extendedParams=" + extendedParams +

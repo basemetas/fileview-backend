@@ -33,10 +33,12 @@ import com.basemetas.fileview.preview.service.ArchiveExtractService.ArchiveExtra
 import com.basemetas.fileview.preview.service.cache.CacheWriteService;
 import com.basemetas.fileview.preview.service.cache.PreviewCacheAssembler;
 import com.basemetas.fileview.preview.service.cache.CacheReadService;
+import com.basemetas.fileview.preview.service.download.DownloadDeduplicationService;
 import com.basemetas.fileview.preview.service.download.DownloadTaskManager;
 import com.basemetas.fileview.preview.service.mq.producer.DownloadTaskProducer;
 import com.basemetas.fileview.preview.service.mq.event.FilePreviewEvent;
 import com.basemetas.fileview.preview.service.mq.producer.FilePreviewEventProducer;
+import com.basemetas.fileview.preview.service.storage.OssInstanceResolver;
 import com.basemetas.fileview.preview.service.url.PreviewUrlService;
 import com.basemetas.fileview.preview.utils.FileUtils;
 import com.basemetas.fileview.preview.utils.HttpUtils;
@@ -48,7 +50,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import java.io.File;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -120,6 +121,12 @@ public class FilePreviewService {
 
     @Autowired
     private PreviewCacheAssembler previewCacheAssembler;
+
+    @Autowired
+    private OssInstanceResolver ossInstanceResolver;
+
+    @Autowired
+    private DownloadDeduplicationService downloadDeduplicationService;
 
     @Value("${fileview.preview.xlsx.smart-preview-enabled:true}")
     private boolean xlsxSmartPreviewEnabled;
@@ -259,15 +266,23 @@ public class FilePreviewService {
                         "网络文件URL不能为空");
             }
             
-            // 🚫 2. URL安全校验（信任站点/不信任站点）
-            HttpUtils.UrlValidationResult securityResult = httpUtils.validateUrlSecurity(networkFileUrl);
-            if (!securityResult.isValid()) {
-                logger.error("🚫 URL安全校验失败 - URL: {}, Reason: {}", networkFileUrl, securityResult.getErrorMessage());
-                throw FileViewException.of(
-                        ErrorCode.ACCESS_DENIED,
-                        securityResult.getErrorMessage());
+            // 2. 命名OSS配置解析（如适用）
+            resolveNamedOssConfiguration(request);
+
+            // 🚫 3. URL安全校验（信任站点/不信任站点）
+            if (!isS3Url(networkFileUrl)) {
+                HttpUtils.UrlValidationResult securityResult = httpUtils.validateUrlSecurity(networkFileUrl);
+                if (!securityResult.isValid()) {
+                    logger.error("🚫 URL安全校验失败 - URL: {}, Reason: {}", networkFileUrl, securityResult.getErrorMessage());
+                    throw FileViewException.of(
+                            ErrorCode.ACCESS_DENIED,
+                            securityResult.getErrorMessage());
+                }
+            } else {
+                validateS3RequestSecurity(request);
             }
-            // 3. 验证文件格式（在下载前检查）
+
+            // 4. 验证文件格式（在下载前检查）
             String urlFileName = httpUtils.extractFileNameFromUrl(networkFileUrl);
             String requestFileName = request.getFileName();
             String fileNameForType = urlFileName;
@@ -311,15 +326,15 @@ public class FilePreviewService {
             logger.info("✅ 文件格式验证通过 - Extension: {}, Category: {}",
                     fileExtension, fileTypeMapper.getFileCategory(fileExtension));
 
-            // 3. 对于网络下载，如果fileId为空，基于URL自动生成
+            // 5. 对于网络下载，如果fileId为空，基于解析后的远程源自动生成
             fileId = request.getFileId();
             if (fileId == null || fileId.trim().isEmpty()) {
-                fileId = fileUtils.generateFileIdFromFileUrl(request.getNetworkFileUrl());
+                fileId = fileUtils.generateFileIdFromSourceKey(buildRemoteSourceKey(request));
                 // 设置回request对象，确保后续流程能获取到正确的fileId
                 request.setFileId(fileId);
             }
 
-            // 4. 检查缓存（如果不需要强制重新生成）
+            // 6. 检查缓存（如果不需要强制重新生成）
             if (!request.isForceRegenerate()) {
                 Map<String, Object> cachedResponse = handleNetworkFileCacheCheck(
                         fileId, request, displayFileName, startTime, requestBaseUrl);
@@ -328,7 +343,7 @@ public class FilePreviewService {
                 }
             }
 
-            // 5. 确定下载目标路径（如果没有指定，使用默认路径）
+            // 7. 确定下载目标路径（如果没有指定，使用默认路径）
             String downloadTargetPath = request.getDownloadTargetPath();
             if (downloadTargetPath == null || downloadTargetPath.trim().isEmpty()) {
                 downloadTargetPath = storageConfig.getDownloadDir();
@@ -336,7 +351,7 @@ public class FilePreviewService {
                 request.setDownloadTargetPath(downloadTargetPath);
             }
 
-            // 6. 创建异步下载任务
+            // 8. 创建异步下载任务
             DownloadTask downloadTask = downloadTaskManager.createTask(request);
             // 🔑 设置 requestBaseUrl 到下载任务
             if (requestBaseUrl != null && !requestBaseUrl.isEmpty()) {
@@ -345,10 +360,10 @@ public class FilePreviewService {
                 downloadTaskManager.updateTask(downloadTask);
             }
 
-            // 7. 发送下载任务到消息队列
+            // 9. 发送下载任务到消息队列
             downloadTaskProducer.sendDownloadTask(downloadTask);
 
-            // 8. 立即返回fileId，让客户端轮询状态
+            // 10. 立即返回fileId，让客户端轮询状态
             return previewResponseAssembler.buildDownloadingResponse(
                     fileId,
                     displayFileName,
@@ -365,6 +380,65 @@ public class FilePreviewService {
                     "处理网络文件下载预览失败: " + e.getMessage(),
                     e).withFileId(fileId);
         }
+    }
+
+    private boolean isS3Url(String networkFileUrl) {
+        return networkFileUrl != null && networkFileUrl.trim().toLowerCase().startsWith("s3://");
+    }
+
+    private String buildRemoteSourceKey(FilePreviewRequest request) {
+        return downloadDeduplicationService.buildSourceKey(
+                request.getNetworkFileUrl(),
+                request.getBucket(),
+                request.getRegion(),
+                request.getEndpoint(),
+                request.getStorage(),
+                request.getPathStyleAccessEnabled());
+    }
+
+    private void validateS3RequestSecurity(FilePreviewRequest request) {
+        String networkFileUrl = request.getNetworkFileUrl();
+        if (networkFileUrl == null || !networkFileUrl.toLowerCase().startsWith("s3://")) {
+            return;
+        }
+
+        String endpointValue = request.getEndpoint();
+        if (endpointValue == null || endpointValue.trim().isEmpty()) {
+            return;
+        }
+
+        String normalizedEndpoint = normalizeEndpoint(endpointValue);
+        HttpUtils.UrlValidationResult endpointValidation = httpUtils.validateUrlSecurity(normalizedEndpoint);
+        if (!endpointValidation.isValid()) {
+            logger.error("🚫 S3 Endpoint 安全校验失败 - Endpoint: {}, Reason: {}", normalizedEndpoint, endpointValidation.getErrorMessage());
+            throw FileViewException.of(
+                    ErrorCode.ACCESS_DENIED,
+                    "S3 Endpoint 不安全: " + endpointValidation.getErrorMessage());
+        }
+        request.setEndpoint(normalizedEndpoint);
+    }
+
+    private String normalizeEndpoint(String endpoint) {
+        String trimmed = endpoint.trim();
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            return trimmed;
+        }
+        return "https://" + trimmed;
+    }
+
+    private void resolveNamedOssConfiguration(FilePreviewRequest request) {
+        OssInstanceResolver.ResolvedOss resolvedOss = ossInstanceResolver.resolve(request);
+        if (resolvedOss.skipResolution()) {
+            return;
+        }
+
+        request.setStorage(resolvedOss.storageName());
+        request.setBucket(resolvedOss.bucket());
+        request.setRegion(resolvedOss.region());
+        request.setEndpoint(resolvedOss.endpoint());
+        request.setAccessKey(resolvedOss.accessKey());
+        request.setSecretKey(resolvedOss.secretKey());
+        request.setPathStyleAccessEnabled(resolvedOss.pathStyleAccessEnabled());
     }
 
     /**
