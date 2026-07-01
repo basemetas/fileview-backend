@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
+import com.basemetas.fileview.preview.config.FileTypeMapper;
 import com.basemetas.fileview.preview.model.PreviewCacheInfo;
 import com.basemetas.fileview.preview.service.url.MultiPageUrlService;
 
@@ -42,6 +43,9 @@ public class CacheWriteService {
 
     @Autowired
     private com.basemetas.fileview.preview.utils.CacheUtils cacheUtils;
+
+    @Autowired
+    private FileTypeMapper fileTypeMapper;
  
     @Value("${fileview.preview.cache.conversion.success-ttl:86400}")
     private long successTtl;
@@ -116,6 +120,9 @@ public class CacheWriteService {
             // 🔑 关键修复：确保预览文件格式正确设置为源文件格式而不是目标格式
             // 从转换结果中获取原始文件格式
             String originalFileFormat = (String) conversionResult.get("originalFileType");
+            if (originalFileFormat == null || originalFileFormat.trim().isEmpty()) {
+                originalFileFormat = (String) conversionResult.get("originalFileFormat");
+            }
             if (originalFileFormat != null && !originalFileFormat.trim().isEmpty()) {
                 cacheData.put("previewFileFormat", originalFileFormat);
             } else {
@@ -125,6 +132,8 @@ public class CacheWriteService {
 
             // 🔑 关键修复：确保原始文件路径和文件名正确设置
             // 从转换结果中获取原始文件路径和文件名
+            cacheData.put("previewFileFormat", resolvePreviewFileFormat(conversionResult, targetFormat));
+
             String originalFilePath = (String) conversionResult.get("originalFilePath");
             String originalFileName = (String) conversionResult.get("originalFileName");
 
@@ -284,6 +293,9 @@ public class CacheWriteService {
             // 🔑 关键修复：确保预览文件格式正确设置为源文件格式而不是目标格式
             // 从转换结果中获取原始文件格式
             String originalFileFormat = (String) conversionResult.get("originalFileType");
+            if (originalFileFormat == null || originalFileFormat.trim().isEmpty()) {
+                originalFileFormat = (String) conversionResult.get("originalFileFormat");
+            }
             if (originalFileFormat != null && !originalFileFormat.trim().isEmpty()) {
                 cacheData.put("previewFileFormat", originalFileFormat);
             } else {
@@ -293,6 +305,8 @@ public class CacheWriteService {
 
             // 🔑 关键修复：确保原始文件路径和文件名正确设置
             // 从转换结果中获取原始文件路径和文件名
+            cacheData.put("previewFileFormat", resolvePreviewFileFormat(conversionResult, targetFormat));
+
             String originalFilePath = (String) conversionResult.get("originalFilePath");
             String originalFileName = (String) conversionResult.get("originalFileName");
 
@@ -530,6 +544,25 @@ public class CacheWriteService {
             logger.warn("⚠️ 写入 CONVERTING 状态失败（不影响主流程）- FileId: {}, TargetFormat: {}",
                     fileId, targetFormat, e);
         }
+    }
+
+    private String resolvePreviewFileFormat(Map<String, Object> conversionResult, String targetFormat) {
+        String originalFormat = null;
+        if (conversionResult != null) {
+            Object originalFileFormat = conversionResult.get("originalFileFormat");
+            if (originalFileFormat == null) {
+                originalFileFormat = conversionResult.get("originalFileType");
+            }
+            if (originalFileFormat != null) {
+                originalFormat = originalFileFormat.toString();
+            }
+        }
+
+        if (originalFormat != null && !originalFormat.trim().isEmpty()
+                && "archive".equals(fileTypeMapper.getStrategyType(originalFormat))) {
+            return "archive";
+        }
+        return targetFormat;
     }
 
 }

@@ -17,6 +17,7 @@ package com.basemetas.fileview.preview.model.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.basemetas.fileview.preview.common.exception.ErrorCode;
 
 import java.time.LocalDateTime;
@@ -39,7 +40,7 @@ import java.util.Map;
  *   "fileId": "xxx",
  *   "status": "SUCCESS",
  *   "previewUrl": "...",
- *   "multiPage": true,                   // 多页文件支持
+ *   "isMultiPage": true,                 // 多页文件支持
  *   "totalPages": 5,
  *   "pageUrls": [...],
  *   ...
@@ -155,12 +156,14 @@ public class FilePreviewResponse {
     
     // ========== 多页文件支持 ==========
     /** 是否为多页文件 */
+    @JsonProperty("isMultiPage")
     private Boolean multiPage;
     
     /** 总页数（多页文件） */
     private Integer totalPages;
     
     /** 多页文件的页面URL映射（页码 -> URL） */
+    @JsonProperty("pageUrls")
     private Map<Integer, String> pageUrlMap;
     
     // ========== 扩展信息 ==========
@@ -451,10 +454,12 @@ public class FilePreviewResponse {
         this.extendedProperties = extendedProperties;
     }
     
+    @JsonProperty("isMultiPage")
     public Boolean getMultiPage() {
         return multiPage;
     }
     
+    @JsonProperty("isMultiPage")
     public void setMultiPage(Boolean multiPage) {
         this.multiPage = multiPage;
     }
@@ -467,10 +472,12 @@ public class FilePreviewResponse {
         this.totalPages = totalPages;
     }
     
+    @JsonProperty("pageUrls")
     public Map<Integer, String> getPageUrlMap() {
         return pageUrlMap;
     }
     
+    @JsonProperty("pageUrls")
     public void setPageUrlMap(Map<Integer, String> pageUrlMap) {
         this.pageUrlMap = pageUrlMap;
     }
