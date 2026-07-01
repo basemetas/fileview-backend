@@ -111,7 +111,7 @@ public class PreviewResponseAssembler {
         response.put("urlExpirationSeconds", (long) urlExpirationHours * 3600);
         response.put("urlExpirationTime", LocalDateTime.now().plusHours(urlExpirationHours));
         if (cacheInfo.isMultiPage()) {
-            response.put("multiPage", true);
+            response.put("isMultiPage", true);
             response.put("totalPages", cacheInfo.getTotalPages());
             // 🔑 多页URL拼接
             Map<Integer, String> relativePageUrls = cacheInfo.getPageUrls();
@@ -125,7 +125,7 @@ public class PreviewResponseAssembler {
                     fullPageUrls.put(entry.getKey(), fullPageUrl);
                 }
             }
-            response.put("pageUrlMap", fullPageUrls);
+            response.put("pageUrls", fullPageUrls);
         }
         
         return response;
@@ -518,7 +518,7 @@ public class PreviewResponseAssembler {
         response.put("path", requestPath);
         response.put("status", FilePreviewResponse.PreviewMode.CONVERT.name());
         response.put("mode", "CONVERT");
-        response.put("multiPage", true);
+        response.put("isMultiPage", true);
         response.put("totalPages", cacheInfo.getTotalPages());
         
         // 🔑 多页URL拼接
@@ -564,7 +564,7 @@ public class PreviewResponseAssembler {
         response.put("fileId", fileId);
         response.put("errorCode", ErrorCode.FILE_NOT_FOUND.getCode());
         response.put("message", "文件不是多页文件");
-        response.put("multiPage", false);
+        response.put("isMultiPage", false);
         response.put("path", requestPath);
         response.put("urlExpirationSeconds", (long) urlExpirationHours * 3600);
         response.put("urlExpirationTime", LocalDateTime.now().plusHours(urlExpirationHours));

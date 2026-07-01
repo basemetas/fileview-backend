@@ -108,6 +108,9 @@ public class ConversionCompletedConsumer {
             // 获取转换后的文件路径
             String convertedFilePath = (String) unifiedInfo.get("convertedFilePath");
             String originalFileType = (String) unifiedInfo.get("originalFileType");
+            if (originalFileType == null || originalFileType.trim().isEmpty()) {
+                originalFileType = (String) unifiedInfo.get("originalFileFormat");
+            }
             String targetFormat = (String) unifiedInfo.get("targetFormat");
             logger.info("✅ 转换完成 - FileId: {}, ConvertedPath: {}, Format: {} -> {}",
                     fileId, convertedFilePath, originalFileType, targetFormat);

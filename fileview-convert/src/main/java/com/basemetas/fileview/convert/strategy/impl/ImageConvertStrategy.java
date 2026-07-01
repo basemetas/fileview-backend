@@ -27,6 +27,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 
@@ -145,6 +149,10 @@ public class ImageConvertStrategy implements FileConvertStrategy {
             }
 
             // 直接使用magick命令进行转换
+            if (isTiffToPng(sourceFile, targetFormat)) {
+                return convertMultiPageTiffToPng(filePath, targetFilePath);
+            }
+
             return convertWithMagickCommand(filePath, targetFilePath, targetFormat);
 
         } catch (Exception e) {
@@ -156,6 +164,168 @@ public class ImageConvertStrategy implements FileConvertStrategy {
     /**
      * 使用magick命令进行图片转换（仅Linux环境）
      */
+    private boolean isTiffToPng(File sourceFile, String targetFormat) {
+        String sourceFormat = getFileExtension(sourceFile.getName());
+        return ("tif".equalsIgnoreCase(sourceFormat) || "tiff".equalsIgnoreCase(sourceFormat))
+                && "png".equalsIgnoreCase(targetFormat);
+    }
+
+    private boolean convertMultiPageTiffToPng(String sourcePath, String targetPath) {
+        try {
+            File targetFile = new File(targetPath);
+            File targetDir = targetFile.getParentFile();
+            String targetBaseName = getFileNameWithoutExtension(targetFile.getName());
+            File pagesDir = new File(targetDir, targetBaseName);
+
+            if (!pagesDir.exists() && !pagesDir.mkdirs()) {
+                logger.error("Failed to create TIFF pages directory: {}", pagesDir.getAbsolutePath());
+                return false;
+            }
+
+            clearExistingPageFiles(pagesDir);
+
+            String magickPath = findMagickCommand();
+            String pagePattern = new File(pagesDir, "page_%d.png").getAbsolutePath();
+            ProcessBuilder pb = new ProcessBuilder(
+                    magickPath,
+                    sourcePath,
+                    "-background", "white",
+                    "-alpha", "remove",
+                    "-alpha", "off",
+                    "-compress", "zip",
+                    "-scene", "1",
+                    pagePattern);
+
+            Map<String, String> env = pb.environment();
+            env.put("LANG", "en_US.UTF-8");
+            env.put("LC_ALL", "en_US.UTF-8");
+            pb.redirectErrorStream(true);
+
+            logger.info("Executing multi-page TIFF conversion command: {}", String.join(" ", pb.command()));
+            Process process = pb.start();
+            String output = readProcessOutput(process);
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0) {
+                logger.error("Multi-page TIFF conversion failed with exit code: {}", exitCode);
+                logger.error("Command output: {}", output);
+                return false;
+            }
+
+            normalizePageNumbering(pagesDir);
+            File[] pageFiles = listPageFiles(pagesDir);
+            if (pageFiles == null || pageFiles.length == 0) {
+                logger.error("No TIFF page files were created in: {}", pagesDir.getAbsolutePath());
+                return false;
+            }
+
+            File firstPage = new File(pagesDir, "page_1.png");
+            if (!firstPage.exists() || firstPage.length() == 0) {
+                logger.error("First TIFF page is missing or empty: {}", firstPage.getAbsolutePath());
+                return false;
+            }
+
+            Files.copy(firstPage.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            logger.info("Multi-page TIFF conversion successful - Pages: {}, Directory: {}, FirstPageCopy: {}",
+                    pageFiles.length, pagesDir.getAbsolutePath(), targetFile.getAbsolutePath());
+            return targetFile.exists() && targetFile.length() > 0;
+        } catch (Exception e) {
+            logger.error("Multi-page TIFF conversion failed from {} to {}", sourcePath, targetPath, e);
+            return false;
+        }
+    }
+
+    private void clearExistingPageFiles(File pagesDir) {
+        File[] oldPages = pagesDir.listFiles((dir, name) -> name.matches("page_\\d+\\.png"));
+        if (oldPages == null) {
+            return;
+        }
+        for (File oldPage : oldPages) {
+            if (!oldPage.delete()) {
+                logger.warn("Failed to delete old TIFF page file: {}", oldPage.getAbsolutePath());
+            }
+        }
+    }
+
+    private File[] listPageFiles(File pagesDir) {
+        File[] pageFiles = pagesDir.listFiles((dir, name) -> name.matches("page_\\d+\\.png"));
+        if (pageFiles != null) {
+            Arrays.sort(pageFiles, Comparator.comparingInt(this::extractPageNumber));
+        }
+        return pageFiles;
+    }
+
+    private void normalizePageNumbering(File pagesDir) {
+        File firstPage = new File(pagesDir, "page_1.png");
+        File zeroPage = new File(pagesDir, "page_0.png");
+        if (firstPage.exists() || !zeroPage.exists()) {
+            return;
+        }
+
+        File[] pageFiles = listPageFiles(pagesDir);
+        if (pageFiles == null) {
+            return;
+        }
+
+        Arrays.sort(pageFiles, Comparator.comparingInt(this::extractPageNumber).reversed());
+        for (File pageFile : pageFiles) {
+            int pageNumber = extractPageNumber(pageFile);
+            File renamed = new File(pagesDir, "page_" + (pageNumber + 1) + ".png");
+            if (!pageFile.renameTo(renamed)) {
+                logger.warn("Failed to normalize TIFF page number: {} -> {}",
+                        pageFile.getAbsolutePath(), renamed.getAbsolutePath());
+            }
+        }
+    }
+
+    private int extractPageNumber(File pageFile) {
+        String name = pageFile.getName();
+        int start = name.indexOf('_') + 1;
+        int end = name.lastIndexOf('.');
+        if (start <= 0 || end <= start) {
+            return Integer.MAX_VALUE;
+        }
+        try {
+            return Integer.parseInt(name.substring(start, end));
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    private String getFileNameWithoutExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+    }
+
+    private String findMagickCommand() {
+        String[] possibleMagickPaths = {
+                "/usr/bin/magick",
+                "/usr/local/bin/magick",
+                "/opt/imagemagick/bin/magick",
+                "magick"
+        };
+
+        for (String path : possibleMagickPaths) {
+            if (new File(path).exists() && new File(path).canExecute()) {
+                logger.info("Found ImageMagick 7.x at: {}", path);
+                return path;
+            }
+        }
+        return "magick";
+    }
+
+    private String readProcessOutput(Process process) throws java.io.IOException {
+        StringBuilder output = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+        }
+        return output.toString();
+    }
+
     private boolean convertWithMagickCommand(String sourcePath, String targetPath, String targetFormat) {
         try {
             logger.info("Using magick command for conversion: {} -> {}", sourcePath, targetPath);
