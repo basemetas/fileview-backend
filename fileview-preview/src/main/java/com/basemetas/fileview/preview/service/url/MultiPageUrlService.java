@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import com.basemetas.fileview.preview.service.storage.FileStorageService;
-import com.basemetas.fileview.preview.service.storage.impl.LocalFileStorageService;
 
 /**
  * 负责生成多页文件的页面URL列表。
@@ -36,7 +35,7 @@ public class MultiPageUrlService {
     private FileStorageService fileStorageService;
 
     @Autowired
-    private BaseUrlProvider baseUrlProvider;
+    private PreviewUrlService previewUrlService;
 
     /**
      * 生成所有页面的预览URL（相对地址）
@@ -85,10 +84,7 @@ public class MultiPageUrlService {
 
                     // 如果存储服务未生成URL,使用降级方案（相对路径）
                     if (pageUrl == null || pageUrl.trim().isEmpty()) {
-                        pageUrl = "/preview/api/files/" + fileId +
-                                "/page/" + pageNum +
-                                "?path=" + java.net.URLEncoder.encode(pageFilePath, java.nio.charset.StandardCharsets.UTF_8) +
-                                "&t=" + System.currentTimeMillis();
+                        pageUrl = previewUrlService.generatePreviewUrl(fileId, pageFilePath);
                     }
 
                     pageUrls.put(pageNum, pageUrl);
