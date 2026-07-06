@@ -22,7 +22,7 @@
 
 | 组件 | 版本要求 | 说明 |
 |------|---------|------|
-| Java | 17+ | 运行环境 |
+| Java | 21+ | 运行环境 |
 | Maven | 3.8+ | 编译工具 |
 | Redis | 6.0+ | 缓存服务 |
 | RocketMQ | 5.0+ | 消息队列 |
@@ -575,7 +575,7 @@ curl http://localhost:8183/actuator/metrics/jvm.memory.used
 
 部署前请确认以下项目：
 
-- [ ] Java 17+ 已安装
+- [ ] Java 21+ 已安装
 - [ ] Redis 服务已启动
 - [ ] RocketMQ 服务已启动
 - [ ] LibreOffice 已安装（如需使用）

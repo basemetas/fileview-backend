@@ -99,7 +99,7 @@ graph TD
 > 完整部署说明请参考项目根目录的 `DEPLOYMENT.md` 文档。
 
 - **基础环境**：
-  - Java 17+
+  - Java 21+
   - Maven 3.8+
 - **外部服务**：
   - Redis 6.0+（缓存与状态存储）

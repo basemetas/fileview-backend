@@ -15,6 +15,11 @@
     <artifactId>fileview-convert</artifactId>
     <name>File Convert Service</name>
     <description>File Convert Microservice</description>
+    
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
  
     <dependencies>
         <dependency>
@@ -165,6 +170,22 @@
         <!-- 去除版本号，只保留包名 -->
         <finalName>${project.artifactId}</finalName>
         <plugins>
+            <!-- 编译插件  -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                    <encoding>UTF-8</encoding>
+                    <parameters>true</parameters>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
