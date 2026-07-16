@@ -17,6 +17,7 @@ package com.basemetas.fileview.preview.model.request;
 
 import com.basemetas.fileview.preview.common.validation.NoPathTraversal;
 import com.basemetas.fileview.preview.common.validation.SecurePath;
+import com.basemetas.fileview.preview.model.download.DownloadRequestAuthContext;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -139,6 +140,12 @@ public class FilePreviewRequest {
     
     /** 扩展参数 */
     private Map<String, Object> extendedParams;
+
+    /**
+     * 网络文件下载时的鉴权上下文。
+     * 由服务端根据当前请求和配置规则填充。
+     */
+    private DownloadRequestAuthContext downloadRequestAuthContext;
     
     // ========== 构造函数 ==========
     public FilePreviewRequest() {
@@ -388,6 +395,14 @@ public class FilePreviewRequest {
         this.extendedParams = newParams;
     }
 
+    public DownloadRequestAuthContext getDownloadRequestAuthContext() {
+        return downloadRequestAuthContext;
+    }
+
+    public void setDownloadRequestAuthContext(DownloadRequestAuthContext downloadRequestAuthContext) {
+        this.downloadRequestAuthContext = downloadRequestAuthContext;
+    }
+
 
     
     
@@ -408,6 +423,9 @@ public class FilePreviewRequest {
                 ", downloadTargetPath='" + downloadTargetPath + '\'' +
                 ", forceRegenerate=" + forceRegenerate +
                 ", preferredFormat='" + preferredFormat + '\'' +
+                ", authContextHash='" + (downloadRequestAuthContext != null
+                        ? downloadRequestAuthContext.resolveAuthContextHash()
+                        : "public") + '\'' +
                 ", extendedParams=" + extendedParams +
                 '}';
     }

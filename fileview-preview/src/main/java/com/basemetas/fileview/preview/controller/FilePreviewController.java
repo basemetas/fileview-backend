@@ -26,7 +26,9 @@ import com.basemetas.fileview.preview.model.request.PollingRequest;
 import com.basemetas.fileview.preview.service.FilePreviewService;
 import com.basemetas.fileview.preview.model.response.ReturnResponse;
 import com.basemetas.fileview.preview.service.cache.CacheReadService;
+import com.basemetas.fileview.preview.model.download.DownloadRequestAuthContext;
 import com.basemetas.fileview.preview.service.download.DownloadTaskManager;
+import com.basemetas.fileview.preview.service.download.DownloadRequestAuthResolver;
 import com.basemetas.fileview.preview.service.response.PreviewResponseAssembler;
 import com.basemetas.fileview.preview.service.url.RequestAwareBaseUrlProvider;
 import com.basemetas.fileview.preview.utils.EncodingUtils;
@@ -100,6 +102,9 @@ public class FilePreviewController {
 
     @Autowired
     private HttpUtils httpUtils;
+
+    @Autowired
+    private DownloadRequestAuthResolver downloadRequestAuthResolver;
     
     @Autowired
     private PreviewResponseAssembler previewResponseAssembler;
@@ -232,6 +237,7 @@ public class FilePreviewController {
         // 🔑 解析请求的 baseUrl
         String requestBaseUrl = httpUtils.getDynamicBaseUrl();
         logger.debug("🌐 解析请求 baseUrl - BaseUrl: {}", requestBaseUrl);
+        attachDownloadRequestAuthContext(request, httpRequest);
         
         try {
             // Service层会抛出FileViewException，由GlobalExceptionHandler统一处理
@@ -1179,5 +1185,16 @@ public class FilePreviewController {
                     "获取多页信息异常: " + e.getMessage(),
                     e).withFileId(fileId);
         }
+    }
+
+    private void attachDownloadRequestAuthContext(FilePreviewRequest request, HttpServletRequest httpRequest) {
+        String networkFileUrl = request.getNetworkFileUrl();
+        if (networkFileUrl == null || networkFileUrl.trim().isEmpty()) {
+            request.setDownloadRequestAuthContext(DownloadRequestAuthContext.empty());
+            return;
+        }
+
+        request.setDownloadRequestAuthContext(
+                downloadRequestAuthResolver.resolve(httpRequest, networkFileUrl));
     }
 }

@@ -55,6 +55,7 @@ public class DownloadTaskManager {
         task.setFileName(request.getFileName());
         task.setPassWord(request.getPassword()); // 🔑 设置压缩包密码
         task.setClientId(request.getClientId()); // 🔑 设置客户端标识
+        task.setDownloadRequestAuthContext(request.getDownloadRequestAuthContext());
         
         // 存储到Redis
         String key = CacheKeyManager.DOWNLOAD_TASK_PREFIX + task.getFileId(); // 使用fileId作Redis键

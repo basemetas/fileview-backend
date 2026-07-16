@@ -249,9 +249,57 @@ java -jar fileview-preview-1.0.0.jar \
   - `fileTemp/downloads`：下载文件
   - `fileTemp/source/uncompress`：EPUB 等解压目录
   - `fileTemp/preview`：转换后用于预览的文件
+- **私有网络文件鉴权转发**：
+  - 默认关闭，通过 `fileview.network.download.auth-forward.*` 配置启用
+  - 支持按规则从当前预览请求中提取 `HEADER` / `COOKIE`
+  - 支持将提取到的值转发为目标下载请求的 `HEADER` / `COOKIE`
+  - 下载缓存会按 `URL` 复用；前提是“同一个文件链接，只要有权限，内容就一致”
+  - `Cookie` 只能通过 `COOKIE` 类型表达，不支持把 `Cookie` 当作 `HEADER` 名来配置
 - **转换引擎配置**：
   - LibreOffice 监听的端口 / 进程数量
   - 外部引擎（如 CAD2X、ImageMagick）的二进制路径
+
+#### 私有网络文件鉴权转发示例
+
+```yml
+fileview:
+  network:
+    download:
+      auth-forward:
+        enabled: true
+        same-host-only: false
+        allowed-host-patterns:
+          - "*.example.com"
+        rules:
+          - source-type: COOKIE
+            source-name: FILE_SESSION
+            target-type: COOKIE
+            target-name: FILE_SESSION
+          - source-type: HEADER
+            source-name: X-Auth-Token
+            target-type: HEADER
+            target-name: Authorization
+            value-prefix: "Bearer "
+          - source-type: COOKIE
+            source-name: FILE_SESSION
+            target-type: HEADER
+            target-name: Authorization
+            value-prefix: "Bearer "
+          - source-type: HEADER
+            source-name: X-Download-Session
+            target-type: COOKIE
+            target-name: FILE_SESSION
+```
+
+这个配置模型不绑定任何具体 token 名，适合公开仓库按宿主系统需要自行接入。
+其中 `same-host-only: false` 表示允许跨 host 转发；一旦配置了 `allowed-host-patterns`，则只会放行白名单中的目标 host。
+
+上面的 4 条规则分别对应：
+
+- `COOKIE -> COOKIE`：把当前请求里的 `FILE_SESSION` Cookie 原样转发给下游文件服务
+- `HEADER -> HEADER`：把 `X-Auth-Token` 映射成下游的 `Authorization` 请求头
+- `COOKIE -> HEADER`：把 Cookie 中的会话值转换成下游的 `Authorization: Bearer ...`
+- `HEADER -> COOKIE`：把上游 Header 中的会话值写成下游请求里的 Cookie 项
 
 ---
 

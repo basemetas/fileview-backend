@@ -199,6 +199,14 @@ fileview:
         blacklist-domains: test.moqisoft.com
         # 小文件阈值（字节），低于此值跳过 HEAD 直接 GET
         small-file-threshold: 1048576  # 1MB
+      # 鉴权信息转发配置
+      auth-forward:
+        enabled: false
+        # true: 只允许转发到当前请求的同 host 下载地址，忽略 allowed-host-patterns
+        # false: 若配置了 allowed-host-patterns 则按白名单放行；未配置时允许任意 host
+        same-host-only: true
+        allowed-host-patterns: []
+        rules: [] # 更多完整示例见 README.md
     # 网络文件URL安全配置
     security:
       # 信任站点列表（白名单），多个用','隔开，为空则不限制

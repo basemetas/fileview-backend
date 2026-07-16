@@ -15,6 +15,7 @@
  */
 package com.basemetas.fileview.preview.service.download;
 
+import com.basemetas.fileview.preview.model.download.DownloadRequestAuthContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +74,11 @@ public class SmartDownloadService {
      */
     public String smartDownload(String fileUrl, String targetPath, String username, 
                                String password, int timeout) throws Exception {
+        return smartDownload(fileUrl, targetPath, username, password, timeout, null);
+    }
+
+    public String smartDownload(String fileUrl, String targetPath, String username,
+                               String password, int timeout, DownloadRequestAuthContext authContext) throws Exception {
         // 1. 检查缓存的ETag和Last-Modified
         String urlHash = encodingUtils.calculateMD5(fileUrl);
         String etagKey = CacheKeyManager.buildEtagKey(urlHash);
@@ -85,14 +91,14 @@ public class SmartDownloadService {
         if (cachedEtag == null && cachedLastModified == null) {
             logger.debug("无缓存元数据，跳过 HEAD 直接下载 - URL: {}", httpUtils.maskSensitiveUrl(fileUrl));
             String downloadedFilePath = fileDownloadService.downloadFile(
-                fileUrl, targetPath, username, password, timeout);
+                fileUrl, targetPath, username, password, timeout, null, authContext);
             // 下载后会由 FileDownloadService 自动保存 ETag/Last-Modified
             return downloadedFilePath;
         }
         
         // 2. 发送HEAD请求检查文件是否已修改
         CacheInfo cacheInfo = checkFileModification(fileUrl, username, password, 
-                                                   cachedEtag, cachedLastModified);
+                                                   cachedEtag, cachedLastModified, authContext);
         
         // 3. 检查文件是否已修改
         boolean isModified = isFileModified(cachedEtag, cacheInfo.etag, 
@@ -109,7 +115,7 @@ public class SmartDownloadService {
         
         // 4. 文件已修改或本地文件不存在，执行下载
         String downloadedFilePath = fileDownloadService.downloadFile(
-            fileUrl, targetPath, username, password, timeout);
+            fileUrl, targetPath, username, password, timeout, null, authContext);
         
         // 5. 更新缓存信息
         if (cacheInfo.etag != null) {
@@ -135,7 +141,8 @@ public class SmartDownloadService {
      */
     public String smartDownload(String fileUrl, String targetPath, String username,
                                 String password, int timeout, boolean useSmartDownload) throws Exception {
-        return smartDownload(fileUrl, targetPath, username, password, timeout, useSmartDownload, null);
+        return smartDownload(fileUrl, targetPath, username, password, timeout,
+                useSmartDownload, null, null);
     }
     
     /**
@@ -152,19 +159,28 @@ public class SmartDownloadService {
      */
     public String smartDownload(String fileUrl, String targetPath, String username,
                                 String password, int timeout, boolean useSmartDownload, String fileName) throws Exception {
+        return smartDownload(fileUrl, targetPath, username, password, timeout,
+                useSmartDownload, fileName, null);
+    }
+
+    public String smartDownload(String fileUrl, String targetPath, String username,
+                                String password, int timeout, boolean useSmartDownload, String fileName,
+                                DownloadRequestAuthContext authContext) throws Exception {
         // 仅当调用方偏好为true 且 配置开关启用 且 未指定自定义文件名 时，才走智能下载
         if (useSmartDownload && smartDownloadEnabled && (fileName == null || fileName.trim().isEmpty())) {
-            return smartDownload(fileUrl, targetPath, username, password, timeout);
+            return smartDownload(fileUrl, targetPath, username, password, timeout, authContext);
         }
         // 否则直接下载（跳过ETag/Last-Modified检查），并在底层使用自定义文件名（如果有）
-        return fileDownloadService.downloadFile(fileUrl, targetPath, username, password, timeout, fileName);
+        return fileDownloadService.downloadFile(fileUrl, targetPath, username, password, timeout,
+                fileName, authContext);
     }
     
     /**
      * 检查文件修改信息
      */
     private CacheInfo checkFileModification(String fileUrl, String username, String password,
-                                          String cachedEtag, String cachedLastModified) throws Exception {
+                                          String cachedEtag, String cachedLastModified,
+                                          DownloadRequestAuthContext authContext) throws Exception {
         try {
             URL url = new URL(fileUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -175,6 +191,7 @@ public class SmartDownloadService {
                 String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes("UTF-8"));
                 connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
             }
+            DownloadRequestAuthSupport.applyTo(connection, authContext, logger);
             
             connection.setRequestMethod("HEAD");
             connection.setConnectTimeout(10000); // 10秒连接超时
@@ -246,8 +263,7 @@ public class SmartDownloadService {
         }
         return null;
     }
-          
-    
+
     /**
      * 缓存信息封装类
      */

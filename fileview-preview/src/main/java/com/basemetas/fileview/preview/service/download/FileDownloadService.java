@@ -20,6 +20,7 @@ import com.basemetas.fileview.preview.service.cache.CacheKeyManager;
 import com.basemetas.fileview.preview.utils.CacheUtils;
 import com.basemetas.fileview.preview.utils.HttpUtils;
 import com.basemetas.fileview.preview.common.exception.ErrorCode;
+import com.basemetas.fileview.preview.model.download.DownloadRequestAuthContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -107,7 +108,7 @@ public class FileDownloadService {
      */
     public String downloadFile(String fileUrl, String targetPath, String username, 
                               String password, int timeout) {
-        return downloadFile(fileUrl, targetPath, username, password, timeout, null);
+        return downloadFile(fileUrl, targetPath, username, password, timeout, null, null);
     }
     
     /**
@@ -123,6 +124,24 @@ public class FileDownloadService {
      */
     public String downloadFile(String fileUrl, String targetPath, String username, 
                               String password, int timeout, String fileName) {
+        return downloadFile(fileUrl, targetPath, username, password, timeout, fileName, null);
+    }
+
+    /**
+     * 下载网络文件到本地
+     *
+     * @param fileUrl 文件URL
+     * @param targetPath 目标路径
+     * @param username 用户名（可选）
+     * @param password 密码（可选）
+     * @param timeout 超时时间
+     * @param fileName 自定义文件名（可选，非空时将直接使用该名称，不复用旧文件）
+     * @param authContext 下载鉴权上下文（可选）
+     * @return 下载后的本地文件路径
+     */
+    public String downloadFile(String fileUrl, String targetPath, String username,
+                              String password, int timeout, String fileName,
+                              DownloadRequestAuthContext authContext) {
         try {
             logger.info("🌐 开始下载网络文件 - URL: {}, Target: {}", httpUtils.encodeUrl(fileUrl), targetPath);
             
@@ -188,7 +207,7 @@ public class FileDownloadService {
             switch (protocol) {
                 case "http":
                 case "https":
-                    downloadHttpFile(encodedUrl, targetFilePath, timeout);
+                    downloadHttpFile(encodedUrl, targetFilePath, timeout, authContext);
                     break;
                     
                 case "ftp":
@@ -227,16 +246,67 @@ public class FileDownloadService {
             );
         }
     }
+
+    /**
+     * 解决的问题：
+     * - 同一个网络文件 URL 已经被缓存后，后续请求如果没有重新做访问校验，可能会直接复用缓存结果，从而绕过当前请求的权限检查。
+     *
+     * 适用场景：
+     * - 网络文件预览命中本地缓存前的访问资格校验
+     * - 只有当前请求携带了可用透传鉴权上下文时才调用
+     *
+     * 范围：
+     * - 目前仅对 HTTP/HTTPS 执行远端校验，其他协议保持现有行为不额外探测
+     */
+    public void verifyNetworkFileAccess(String fileUrl, int timeout,
+                                        DownloadRequestAuthContext authContext) {
+        if (fileUrl == null || fileUrl.trim().isEmpty()) {
+            throw FileViewException.of(
+                    ErrorCode.INVALID_PARAMETER,
+                    "文件URL不能为空"
+            );
+        }
+
+        try {
+            String encodedUrl = httpUtils.encodeUrl(fileUrl.trim());
+            URI uri = new URI(encodedUrl);
+            String scheme = uri.getScheme();
+            if (scheme == null || scheme.isBlank()) {
+                throw FileViewException.of(
+                        ErrorCode.INVALID_PARAMETER,
+                        "无法解析URL协议: " + encodedUrl
+                );
+            }
+
+            String protocol = scheme.toLowerCase();
+            if (!"http".equals(protocol) && !"https".equals(protocol)) {
+                logger.debug("跳过轻量访问校验 - Protocol: {}, URL: {}",
+                        protocol, httpUtils.maskSensitiveUrl(encodedUrl));
+                return;
+            }
+
+            verifyHttpAccess(encodedUrl, timeout, authContext);
+        } catch (FileViewException e) {
+            throw e;
+        } catch (Exception e) {
+            throw FileViewException.of(
+                    ErrorCode.SYSTEM_ERROR,
+                    "网络文件访问校验失败: " + e.getMessage(),
+                    e
+            );
+        }
+    }
     
     /**
      * 下载HTTP/HTTPS文件（使用java.net.http.HttpClient + NIO零拷贝 + 指数退避重试）
      */
-    private void downloadHttpFile(String fileUrl, String targetFilePath, int timeout) throws IOException {
+    private void downloadHttpFile(String fileUrl, String targetFilePath, int timeout,
+                                  DownloadRequestAuthContext authContext) throws IOException {
         long httpStartTime = System.currentTimeMillis();
         
         // 1. 先尝试条件请求（HEAD）以复用本地文件
         long conditionalCheckStart = System.currentTimeMillis();
-        if (tryConditionalRequest(fileUrl, targetFilePath)) {
+        if (tryConditionalRequest(fileUrl, targetFilePath, authContext)) {
             long conditionalCheckTime = System.currentTimeMillis() - conditionalCheckStart;
             logger.info("⏱️ 条件请求命中304耗时: {}ms - URL: {}", conditionalCheckTime, httpUtils.maskSensitiveUrl(fileUrl));
             return;
@@ -251,7 +321,7 @@ public class FileDownloadService {
         for (int attempt = 0; attempt < maxRetry; attempt++) {
             try {
                 long attemptStart = System.currentTimeMillis();
-                performHttpDownload(fileUrl, targetFilePath, timeout);
+                performHttpDownload(fileUrl, targetFilePath, timeout, authContext);
                 long attemptTime = System.currentTimeMillis() - attemptStart;
                 long totalHttpTime = System.currentTimeMillis() - httpStartTime;
                 logger.info("⏱️ HTTP下载总耗时: {}ms (实际下载: {}ms, 尝试次数: {}) - URL: {}", 
@@ -277,20 +347,68 @@ public class FileDownloadService {
         }
         throw lastException;
     }
+
+    private void verifyHttpAccess(String fileUrl, int timeout,
+                                  DownloadRequestAuthContext authContext) {
+        try {
+            Integer headStatus = null;
+            try {
+                headStatus = sendHttpAccessProbe(fileUrl, timeout, authContext, true);
+                if (isSuccessfulAccessStatus(headStatus)) {
+                    return;
+                }
+                if (isAccessDeniedStatus(headStatus)) {
+                    throw buildAccessDeniedException(fileUrl, headStatus);
+                }
+                logger.debug("HEAD 访问校验未通过，回退到 Range GET - Status: {}, URL: {}",
+                        headStatus, httpUtils.maskSensitiveUrl(fileUrl));
+            } catch (IOException | InterruptedException e) {
+                logger.debug("HEAD 访问校验失败，回退到 Range GET - URL: {}",
+                        httpUtils.maskSensitiveUrl(fileUrl), e);
+            }
+
+            Integer rangeStatus = sendHttpAccessProbe(fileUrl, timeout, authContext, false);
+            if (isSuccessfulAccessStatus(rangeStatus)) {
+                return;
+            }
+            if (isAccessDeniedStatus(rangeStatus)) {
+                throw buildAccessDeniedException(fileUrl, rangeStatus);
+            }
+
+            throw FileViewException.of(
+                    ErrorCode.SYSTEM_ERROR,
+                    String.format("网络文件访问校验失败: HTTP %d, URL: %s",
+                            rangeStatus, httpUtils.maskSensitiveUrl(fileUrl))
+            );
+        } catch (FileViewException e) {
+            throw e;
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw FileViewException.of(
+                    ErrorCode.SYSTEM_ERROR,
+                    "网络文件访问校验失败: " + e.getMessage(),
+                    e
+            );
+        }
+    }
     
     /**
      * 执行HTTP下载（使用java.net.http.HttpClient）
      */
-    private void performHttpDownload(String fileUrl, String targetFilePath, int timeout) 
+    private void performHttpDownload(String fileUrl, String targetFilePath, int timeout,
+                                     DownloadRequestAuthContext authContext)
             throws IOException, InterruptedException {
         
         long requestStart = System.currentTimeMillis();
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
             .uri(URI.create(fileUrl))
             .timeout(Duration.ofMillis(timeout))
             .header("User-Agent", "FileView-Preview-Service/1.0")
-            .GET()
-            .build();
+            .GET();
+        DownloadRequestAuthSupport.applyTo(requestBuilder, authContext, logger);
+        HttpRequest request = requestBuilder.build();
         
         long sendStart = System.currentTimeMillis();
         long requestBuildTime = sendStart - requestStart;
@@ -343,12 +461,51 @@ public class FileDownloadService {
         // 保存响应头中的ETag / Last-Modified
         saveHttpResponseHeaders(fileUrl, response);
     }
+
+    private Integer sendHttpAccessProbe(String fileUrl, int timeout,
+                                        DownloadRequestAuthContext authContext,
+                                        boolean headRequest) throws IOException, InterruptedException {
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                .uri(URI.create(fileUrl))
+                .timeout(Duration.ofMillis(timeout))
+                .header("User-Agent", "FileView-Preview-Service/1.0");
+
+        if (headRequest) {
+            requestBuilder.method("HEAD", HttpRequest.BodyPublishers.noBody());
+        } else {
+            requestBuilder.GET()
+                    .header("Range", "bytes=0-0");
+        }
+        DownloadRequestAuthSupport.applyTo(requestBuilder, authContext, logger);
+
+        HttpResponse<Void> response = httpClient.send(
+                requestBuilder.build(),
+                HttpResponse.BodyHandlers.discarding());
+        return response.statusCode();
+    }
+
+    private boolean isSuccessfulAccessStatus(int statusCode) {
+        return statusCode >= 200 && statusCode < 300;
+    }
+
+    private boolean isAccessDeniedStatus(int statusCode) {
+        return statusCode == 401 || statusCode == 403;
+    }
+
+    private FileViewException buildAccessDeniedException(String fileUrl, int statusCode) {
+        return FileViewException.of(
+                ErrorCode.ACCESS_DENIED,
+                String.format("当前请求无权访问网络文件: HTTP %d, URL: %s",
+                        statusCode, httpUtils.maskSensitiveUrl(fileUrl))
+        );
+    }
     
     /**
      * 尝试条件请求（HEAD + If-None-Match/If-Modified-Since）
      * @return true 如果命中304并成功复用，false 如果需要重新下载
      */
-    private boolean tryConditionalRequest(String fileUrl, String targetFilePath) {
+    private boolean tryConditionalRequest(String fileUrl, String targetFilePath,
+                                          DownloadRequestAuthContext authContext) {
         try {
             String urlHash = httpUtils.computeUrlHash(fileUrl);
             String etag = cacheUtils.getRedisValue(CacheKeyManager.DOWNLOAD_ETAG_PREFIX + urlHash);
@@ -365,6 +522,7 @@ public class FileDownloadService {
                 .timeout(Duration.ofMillis(connectTimeout))
                 .header("User-Agent", "FileView-Preview-Service/1.0")
                 .method("HEAD", HttpRequest.BodyPublishers.noBody());
+            DownloadRequestAuthSupport.applyTo(requestBuilder, authContext, logger);
             
             if (etag != null) {
                 requestBuilder.header("If-None-Match", etag);

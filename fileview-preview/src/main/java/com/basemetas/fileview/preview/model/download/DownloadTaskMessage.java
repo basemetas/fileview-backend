@@ -31,6 +31,7 @@ public class DownloadTaskMessage {
     private String clientId;  // 🔑 客户端标识（用于密码解锁状态查询）
     private String requestBaseUrl;  // 🔑 请求的 baseUrl（用于生成预览地址）
     private String fileName;  // 🔑 前端传入的文件名（可选）
+    private DownloadRequestAuthContext downloadRequestAuthContext; // 下载时透传的鉴权上下文
     
     // 构造函数
     public DownloadTaskMessage() {
@@ -124,6 +125,14 @@ public class DownloadTaskMessage {
     public void setFileName(String fileName) {
         this.fileName = fileName;
     }
+
+    public DownloadRequestAuthContext getDownloadRequestAuthContext() {
+        return downloadRequestAuthContext;
+    }
+
+    public void setDownloadRequestAuthContext(DownloadRequestAuthContext downloadRequestAuthContext) {
+        this.downloadRequestAuthContext = downloadRequestAuthContext;
+    }
     
     @Override
     public String toString() {
@@ -134,6 +143,9 @@ public class DownloadTaskMessage {
                 ", downloadTargetPath='" + downloadTargetPath + '\'' +
                 ", downloadTimeout=" + downloadTimeout +
                 ", fileName='" + fileName + '\'' +
+                ", authContextHash='" + (downloadRequestAuthContext != null
+                        ? downloadRequestAuthContext.resolveAuthContextHash()
+                        : "public") + '\'' +
                 '}';
     }
 }

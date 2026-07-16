@@ -103,7 +103,8 @@ public class DownloadTaskConsumer {
                 fileId, useSmartDownload, httpUtils.maskSensitiveUrl(fileUrl));
             
             DownloadResult downloadResult = downloadDeduplicationService.downloadWithDeduplication(
-                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName);
+                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName,
+                message.getDownloadRequestAuthContext());
             long downloadEndTime = System.currentTimeMillis();
             long downloadDuration = downloadEndTime - downloadStartTime;
             logger.info("⏱️ 下载执行耗时: {}ms - FileId: {}", downloadDuration, fileId);

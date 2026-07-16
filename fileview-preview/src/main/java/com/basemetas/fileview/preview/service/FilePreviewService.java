@@ -33,6 +33,7 @@ import com.basemetas.fileview.preview.service.ArchiveExtractService.ArchiveExtra
 import com.basemetas.fileview.preview.service.cache.CacheWriteService;
 import com.basemetas.fileview.preview.service.cache.PreviewCacheAssembler;
 import com.basemetas.fileview.preview.service.cache.CacheReadService;
+import com.basemetas.fileview.preview.service.download.FileDownloadService;
 import com.basemetas.fileview.preview.service.download.DownloadTaskManager;
 import com.basemetas.fileview.preview.service.mq.producer.DownloadTaskProducer;
 import com.basemetas.fileview.preview.service.mq.event.FilePreviewEvent;
@@ -99,6 +100,9 @@ public class FilePreviewService {
 
     @Autowired
     private DownloadTaskProducer downloadTaskProducer;
+
+    @Autowired
+    private FileDownloadService fileDownloadService;
 
     @Autowired
     private FileTypeMapper fileTypeMapper;
@@ -319,7 +323,17 @@ public class FilePreviewService {
                 request.setFileId(fileId);
             }
 
-            // 4. 检查缓存（如果不需要强制重新生成）
+            // 4. 仅在当前请求携带了可用的透传鉴权上下文时，才在命中本地缓存前做访问校验。
+            // 未开启 auth-forward 或未解析出鉴权信息时，不做这一步匿名探测，避免误伤公开文件或无意义校验。
+            if (request.getDownloadRequestAuthContext() != null
+                    && !request.getDownloadRequestAuthContext().hasNoForwardedAuth()) {
+                fileDownloadService.verifyNetworkFileAccess(
+                        networkFileUrl,
+                        request.getDownloadTimeout(),
+                        request.getDownloadRequestAuthContext());
+            }
+
+            // 5. 检查缓存（如果不需要强制重新生成）
             if (!request.isForceRegenerate()) {
                 Map<String, Object> cachedResponse = handleNetworkFileCacheCheck(
                         fileId, request, displayFileName, startTime, requestBaseUrl);
@@ -328,7 +342,7 @@ public class FilePreviewService {
                 }
             }
 
-            // 5. 确定下载目标路径（如果没有指定，使用默认路径）
+            // 6. 确定下载目标路径（如果没有指定，使用默认路径）
             String downloadTargetPath = request.getDownloadTargetPath();
             if (downloadTargetPath == null || downloadTargetPath.trim().isEmpty()) {
                 downloadTargetPath = storageConfig.getDownloadDir();
@@ -336,7 +350,7 @@ public class FilePreviewService {
                 request.setDownloadTargetPath(downloadTargetPath);
             }
 
-            // 6. 创建异步下载任务
+            // 7. 创建异步下载任务
             DownloadTask downloadTask = downloadTaskManager.createTask(request);
             // 🔑 设置 requestBaseUrl 到下载任务
             if (requestBaseUrl != null && !requestBaseUrl.isEmpty()) {
@@ -345,10 +359,10 @@ public class FilePreviewService {
                 downloadTaskManager.updateTask(downloadTask);
             }
 
-            // 7. 发送下载任务到消息队列
+            // 8. 发送下载任务到消息队列
             downloadTaskProducer.sendDownloadTask(downloadTask);
 
-            // 8. 立即返回fileId，让客户端轮询状态
+            // 9. 立即返回fileId，让客户端轮询状态
             return previewResponseAssembler.buildDownloadingResponse(
                     fileId,
                     displayFileName,

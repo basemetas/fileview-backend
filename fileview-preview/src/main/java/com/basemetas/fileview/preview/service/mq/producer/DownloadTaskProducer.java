@@ -56,6 +56,7 @@ public class DownloadTaskProducer {
             message.setClientId(task.getClientId()); // 🔑 传递客户端标识
             message.setRequestBaseUrl(task.getRequestBaseUrl()); // 🔑 传递 requestBaseUrl
             message.setFileName(task.getFileName()); // 🔑 传递前端文件名
+            message.setDownloadRequestAuthContext(task.getDownloadRequestAuthContext());
             
             Map<String, Object> headers = new HashMap<>();
             headers.put("fileId", task.getFileId());

@@ -15,6 +15,7 @@
  */
 package com.basemetas.fileview.preview.service.download;
 
+import com.basemetas.fileview.preview.model.download.DownloadRequestAuthContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,7 +59,8 @@ public class DownloadDeduplicationService {
      */
     public DownloadResult downloadWithDeduplication(String fileUrl, String targetPath, String username,
             String password, int timeout) throws Exception {
-        return downloadWithDeduplication(fileUrl, targetPath, username, password, timeout, true, null);
+        return downloadWithDeduplication(fileUrl, targetPath, username, password, timeout,
+                true, null, null);
     }
 
     /**
@@ -76,9 +78,29 @@ public class DownloadDeduplicationService {
      */
     public DownloadResult downloadWithDeduplication(String fileUrl, String targetPath, String username,
             String password, int timeout, boolean useSmartDownload, String fileName) throws Exception {
+        return downloadWithDeduplication(fileUrl, targetPath, username, password, timeout,
+                useSmartDownload, fileName, null);
+    }
+
+    /**
+     * 综合下载（整合去重、任务检查、智能下载）
+     *
+     * @param fileUrl 文件URL
+     * @param targetPath 目标路径
+     * @param username 用户名（可选）
+     * @param password 密码（可选）
+     * @param timeout 超时时间
+     * @param useSmartDownload 是否使用智能下载（检查ETag和Last-Modified）
+     * @param fileName 自定义文件名（可选，非空时将直接使用该名称，不复用旧文件）
+     * @param authContext 下载鉴权上下文（可选）
+     * @return 下载结果
+     * @throws Exception 下载过程中可能发生的异常
+     */
+    public DownloadResult downloadWithDeduplication(String fileUrl, String targetPath, String username,
+            String password, int timeout, boolean useSmartDownload, String fileName,
+            DownloadRequestAuthContext authContext) throws Exception {
 
         boolean hasCustomFileName = fileName != null && !fileName.trim().isEmpty();
-
         // 1. 检查是否已有相同URL的下载任务正在进行（仅在未指定自定义文件名时复用）
         if (!hasCustomFileName) {
             String existingTaskId = checkExistingDownloadTask(fileUrl);
@@ -98,7 +120,8 @@ public class DownloadDeduplicationService {
 
         // 3. 使用智能下载或直接下载（统一由SmartDownloadService根据偏好与配置判断）
         String downloadedFilePath = smartDownloadService.smartDownload(
-                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName);
+                fileUrl, targetPath, username, password, timeout, useSmartDownload, fileName,
+                authContext);
 
         // 4. 记录文件哈希值
         recordFileHash(fileUrl, downloadedFilePath);
